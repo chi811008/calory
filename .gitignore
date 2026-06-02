@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Cloudflare Wrangler local state (incl. local D1)
+.wrangler/
+
+# Local secrets (use `wrangler secret put` instead)
+.dev.vars
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+*.swp

@@ -1,0 +1,23 @@
+name = "calory-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 資料庫綁定。database_id 由 `wrangler d1 create calory-db` 產生後填入。
+[[d1_databases]]
+binding = "DB"
+database_name = "calory-db"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+# 每小時觸發一次,用於依使用者當地時間推播日報/週報/睡前提醒 (Phase 3)。
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+# 非機密的公開變數。LIFF 儀表板網址 (Phase 5) 之後填入。
+LIFF_URL = ""
+
+# 機密請用 `wrangler secret put` 設定,不要寫在這裡:
+#   wrangler secret put LINE_CHANNEL_SECRET
+#   wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
+#   wrangler secret put GEMINI_API_KEY
