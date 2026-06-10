@@ -1,4 +1,5 @@
 import type { DayResult } from '../domain/calories';
+import { dailyPraise, nearMissLine, overAchieveLine } from '../domain/praise';
 
 // 即時回饋卡 (Flex Message)。遊戲化的核心視覺:大數字 + 進度條 + 連續天數。
 
@@ -13,6 +14,8 @@ const COLOR = {
 
 export interface FeedbackData {
   headline: string;
+  date?: string; // 達標金句依日期輪替;省略則不顯示金句
+  settled?: boolean; // 是否已結算 (可慶祝達標);進行中改顯示「還可以吃 X 卡」額度。預設 true (向後相容)
   result: DayResult;
   intake: number;
   tdee: number;
@@ -38,10 +41,32 @@ export function feedbackFlex(d: FeedbackData): object {
   const { result } = d;
   const pct = Math.round(result.progress * 100);
 
+  const settled = d.settled ?? true;
+  // 還可以吃多少仍能達標 (負值 = 已吃超出達標額度)。進行中的核心數字。
+  const budget = result.deficit - d.targetDeficit;
+
   let statusText: string;
   let statusColor: string;
   let barColor: string;
-  if (result.deficit < 0) {
+  // 達標慶祝句 (金句/彩蛋/安慰),僅在「結算」後出現,進行中不慶祝。
+  const flair: string[] = [];
+
+  if (!settled) {
+    // 進行中:一律前瞻,告訴你還剩多少額度,不對達標下定論 (赤字只會隨進食變小)。
+    if (result.deficit < 0) {
+      statusText = `🚨 已吃超過總消耗 ${-result.deficit} 卡`;
+      statusColor = COLOR.over;
+      barColor = COLOR.over;
+    } else if (budget >= 0) {
+      statusText = `👍 還可以吃 ${budget} 卡仍達標`;
+      statusColor = COLOR.met;
+      barColor = COLOR.met;
+    } else {
+      statusText = `⚠️ 已超出達標額度 ${-budget} 卡,動一動補回來`;
+      statusColor = COLOR.near;
+      barColor = COLOR.near;
+    }
+  } else if (result.deficit < 0) {
     statusText = `⚠️ 今天吃超標 ${-result.deficit} 卡`;
     statusColor = COLOR.over;
     barColor = COLOR.over;
@@ -49,10 +74,15 @@ export function feedbackFlex(d: FeedbackData): object {
     statusText = `🎉 達標!赤字 ${result.deficit} 卡`;
     statusColor = COLOR.met;
     barColor = COLOR.met;
+    if (d.date) flair.push(dailyPraise(d.date));
+    const bonus = overAchieveLine(result.deficit, d.targetDeficit);
+    if (bonus) flair.push(bonus);
   } else {
-    statusText = `加油!還差 ${result.remaining} 卡達標`;
+    statusText = `差 ${result.remaining} 卡沒達標`;
     statusColor = COLOR.near;
     barColor = COLOR.near;
+    const near = nearMissLine(result.remaining);
+    if (near) flair.push(near);
   }
 
   const bar = {
@@ -95,6 +125,18 @@ export function feedbackFlex(d: FeedbackData): object {
       ],
     },
   ];
+
+  for (const line of flair) {
+    bodyContents.push({
+      type: 'text',
+      text: line,
+      size: 'sm',
+      color: result.met ? COLOR.met : COLOR.near,
+      align: 'center',
+      wrap: true,
+      margin: 'md',
+    });
+  }
 
   if (d.badge) {
     bodyContents.push({

@@ -3,6 +3,8 @@ import { bmr, tdee, ACTIVITY_FACTORS } from '../src/domain/tdee';
 import { computeDay } from '../src/domain/calories';
 import { currentStreak, streakBadge } from '../src/domain/streak';
 import { parseMessage } from '../src/domain/parse';
+import { dailyPraise, nearMissLine, overAchieveLine, NEAR_MISS_KCAL } from '../src/domain/praise';
+import { isDaySettled } from '../src/domain/schedule';
 
 describe('tdee', () => {
   it('用 Mifflin-St Jeor 算男性 BMR', () => {
@@ -104,6 +106,48 @@ describe('streakBadge', () => {
     expect(streakBadge(7)).toContain('7');
     expect(streakBadge(6)).toBeNull();
     expect(streakBadge(8)).toBeNull();
+  });
+});
+
+describe('isDaySettled (達標慶祝時機)', () => {
+  it('進行中且未過晚餐 → 未結算 (不慶祝早上的假達標)', () => {
+    // WHY: 赤字只會隨進食變小,早上「達標」只代表還沒吃夠,不該慶祝。bedtime=23,界=22。
+    expect(isDaySettled(false, 9, 23)).toBe(false);
+    expect(isDaySettled(false, 21, 23)).toBe(false);
+  });
+
+  it('過了就寢前 1 小時 → 結算 (可慶祝)', () => {
+    expect(isDaySettled(false, 22, 23)).toBe(true);
+    expect(isDaySettled(false, 23, 23)).toBe(true);
+  });
+
+  it('已收盤的過去日 (closed) → 一律結算,不看時間', () => {
+    expect(isDaySettled(true, 9, 23)).toBe(true);
+  });
+});
+
+describe('達標驚喜 (praise)', () => {
+  it('dailyPraise 對同一天固定、跨日會變 (輪替不洗版)', () => {
+    // WHY: 同日固定才不會一則訊息一句、同天洗版;跨日要能換,否則又變「每天一樣」。
+    expect(dailyPraise('2026-06-10')).toBe(dailyPraise('2026-06-10'));
+    const week = ['2026-06-10', '2026-06-11', '2026-06-12', '2026-06-13', '2026-06-14'];
+    const uniq = new Set(week.map(dailyPraise));
+    expect(uniq.size).toBeGreaterThan(1);
+  });
+
+  it('nearMissLine 只在「差一點點」時出現', () => {
+    // WHY: 緩解 all-or-nothing —— 差 50 卡內給鼓勵,差太多 (或已達標 remaining=0) 不給。
+    expect(nearMissLine(NEAR_MISS_KCAL)).toContain(`${NEAR_MISS_KCAL}`);
+    expect(nearMissLine(1)).not.toBeNull();
+    expect(nearMissLine(NEAR_MISS_KCAL + 1)).toBeNull();
+    expect(nearMissLine(0)).toBeNull();
+  });
+
+  it('overAchieveLine 只在赤字達目標 1.5 倍時出現', () => {
+    // WHY: 彩蛋要「真的特別努力」才跳,否則失去驚喜的稀有度。
+    expect(overAchieveLine(600, 400)).not.toBeNull(); // 600 ≥ 400×1.5=600
+    expect(overAchieveLine(599, 400)).toBeNull();
+    expect(overAchieveLine(400, 0)).toBeNull(); // 無目標不誤判
   });
 });
 

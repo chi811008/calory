@@ -2,7 +2,8 @@ import type { Env, User } from '../types';
 import { MEAL_LABELS } from '../types';
 import { computeDay, type DayResult } from '../domain/calories';
 import { currentStreak, streakBadge, type DayMet } from '../domain/streak';
-import { localDate, addDays } from '../domain/date';
+import { localDate, addDays, localParts } from '../domain/date';
+import { isDaySettled } from '../domain/schedule';
 import { getDailyTotals, listTodayFood, sumExercise, sumFood, type DayTotals } from '../db/repo';
 import { feedbackFlex } from '../line/flex';
 import { replyMessage } from '../line/client';
@@ -10,6 +11,8 @@ import { replyMessage } from '../line/client';
 const STREAK_WINDOW_DAYS = 30;
 
 export interface DaySummary {
+  date: string;
+  settled: boolean; // 是否已「結算」(可慶祝達標),見 isDaySettled
   result: DayResult;
   intake: number;
   burn: number;
@@ -72,7 +75,8 @@ export async function computeDaySummary(
     if (result.met) streak += 1;
   }
 
-  return { result, intake, burn, streak, badge: streakBadge(streak) };
+  const settled = isDaySettled(closed, localParts(user.tz).hour, user.bedtimeHour);
+  return { date, settled, result, intake, burn, streak, badge: streakBadge(streak) };
 }
 
 /** 把日收支組成回饋卡 (Flex)。即時回覆與排程推播共用。 */
@@ -84,6 +88,8 @@ export function daySummaryFlex(
 ): object {
   return feedbackFlex({
     headline,
+    date: s.date,
+    settled: s.settled,
     result: s.result,
     intake: s.intake,
     tdee: user.tdee,
