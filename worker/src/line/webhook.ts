@@ -10,6 +10,11 @@ import {
   handleDeletePreset,
 } from '../handlers/presets';
 import { handleEditFood, handleDeleteFood } from '../handlers/editFood';
+import {
+  handleListExercise,
+  handleEditExercise,
+  handleDeleteExercise,
+} from '../handlers/editExercise';
 import { startOnboarding, handleOnboarding } from '../handlers/onboarding';
 import { handlePhoto, confirmPhoto, cancelPhoto } from '../handlers/photo';
 import { replyMessage } from './client';
@@ -63,6 +68,12 @@ export async function handleEvent(event: any, env: Env): Promise<void> {
         return handleEditFood(env, user, cmd.index, cmd.calories, replyToken);
       case 'deleteFood':
         return handleDeleteFood(env, user, cmd.index, replyToken);
+      case 'listExercise':
+        return handleListExercise(env, user, replyToken);
+      case 'editExercise':
+        return handleEditExercise(env, user, cmd.index, cmd.calories, replyToken);
+      case 'deleteExercise':
+        return handleDeleteExercise(env, user, cmd.index, replyToken);
       default:
         return replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [helpMessage()]);
     }

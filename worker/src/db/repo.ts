@@ -304,6 +304,53 @@ export async function deleteFood(env: Env, userId: string, id: number): Promise<
   return (res.meta?.changes ?? 0) > 0;
 }
 
+export interface ExerciseRow {
+  id: number;
+  label: string | null;
+  caloriesBurned: number;
+}
+
+/** 取某日的運動記錄,依 id 升冪 (穩定的「今日序號 → id」對應,供改運動/刪運動用)。 */
+export async function listTodayExercise(
+  env: Env,
+  userId: string,
+  date: string,
+): Promise<ExerciseRow[]> {
+  const res = await env.DB.prepare(
+    'SELECT id, label, calories_burned FROM exercise_logs WHERE user_id = ? AND date = ? ORDER BY id',
+  )
+    .bind(userId, date)
+    .all<Row>();
+  return (res.results ?? []).map((r) => ({
+    id: Number(r.id),
+    label: r.label === null || r.label === undefined ? null : String(r.label),
+    caloriesBurned: Number(r.calories_burned),
+  }));
+}
+
+/** 改某筆運動消耗。WHERE 帶 user_id 確保隔離。回傳是否有更新。 */
+export async function updateExercise(
+  env: Env,
+  userId: string,
+  id: number,
+  caloriesBurned: number,
+): Promise<boolean> {
+  const res = await env.DB.prepare(
+    'UPDATE exercise_logs SET calories_burned = ? WHERE id = ? AND user_id = ?',
+  )
+    .bind(caloriesBurned, id, userId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+/** 刪某筆運動。WHERE 帶 user_id 確保隔離。回傳是否有刪除。 */
+export async function deleteExercise(env: Env, userId: string, id: number): Promise<boolean> {
+  const res = await env.DB.prepare('DELETE FROM exercise_logs WHERE id = ? AND user_id = ?')
+    .bind(id, userId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
 export async function sumFood(env: Env, userId: string, date: string): Promise<number> {
   const row = await env.DB.prepare(
     'SELECT COALESCE(SUM(calories), 0) AS total FROM food_logs WHERE user_id = ? AND date = ?',

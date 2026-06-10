@@ -38,6 +38,9 @@ export type ParsedMessage =
   | { kind: 'deletePreset'; label: string }
   | { kind: 'editFood'; index: number; calories: number }
   | { kind: 'deleteFood'; index: number }
+  | { kind: 'listExercise' }
+  | { kind: 'editExercise'; index: number; calories: number }
+  | { kind: 'deleteExercise'; index: number }
   | { kind: 'log'; items: LogItem[] };
 
 const MEAL_KEYWORDS: { re: RegExp; meal: Meal }[] = [
@@ -58,6 +61,9 @@ const SAVE_PRESET_RE = /^存\s+(.+?)\s+(\d+(?:\.\d+)?)\s*$/;
 const DELETE_PRESET_RE = /^刪範本\s+(.+?)\s*$/;
 const EDIT_FOOD_RE = /^改\s+(\d+)\s+(\d+(?:\.\d+)?)\s*$/;
 const DELETE_FOOD_RE = /^刪\s+(\d+)\s*$/;
+const LIST_EXERCISE_RE = /^(運動清單|運動列表|運動記錄|運動紀錄)$/;
+const EDIT_EXERCISE_RE = /^改運動\s+(\d+)\s+(\d+(?:\.\d+)?)\s*$/;
+const DELETE_EXERCISE_RE = /^刪運動\s+(\d+)\s*$/;
 
 const NUMBER_RE = /-?\d+(\.\d+)?/;
 
@@ -185,6 +191,21 @@ export function parseMessage(raw: string): ParsedMessage {
     if (del) {
       const index = Number(del[1]);
       if (index > 0) return { kind: 'deleteFood', index };
+    }
+
+    if (LIST_EXERCISE_RE.test(one)) return { kind: 'listExercise' };
+
+    const ee = one.match(EDIT_EXERCISE_RE);
+    if (ee) {
+      const index = Number(ee[1]);
+      const calories = Math.round(Number(ee[2]));
+      if (index > 0 && calories > 0) return { kind: 'editExercise', index, calories };
+    }
+
+    const de = one.match(DELETE_EXERCISE_RE);
+    if (de) {
+      const index = Number(de[1]);
+      if (index > 0) return { kind: 'deleteExercise', index };
     }
   }
 

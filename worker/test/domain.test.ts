@@ -251,6 +251,30 @@ describe('parseMessage — 控制指令', () => {
     expect(parseMessage('刪 3')).toEqual({ kind: 'deleteFood', index: 3 });
   });
 
+  it('運動清單 / 改運動 N C / 刪運動 N (列出與修改今日運動記錄)', () => {
+    expect(parseMessage('運動清單')).toEqual({ kind: 'listExercise' });
+    expect(parseMessage('運動列表')).toEqual({ kind: 'listExercise' });
+    expect(parseMessage('改運動 2 250')).toEqual({
+      kind: 'editExercise',
+      index: 2,
+      calories: 250,
+    });
+    expect(parseMessage('刪運動 3')).toEqual({ kind: 'deleteExercise', index: 3 });
+  });
+
+  it('運動指令不可被「運動 N 記錄」或「改/刪 N」誤判 (順序)', () => {
+    // WHY: 「運動清單」開頭是運動關鍵字,須在控制指令層先判,否則落入記錄批次;
+    //      「改運動/刪運動」也須早於 editFood/deleteFood,免得被當成食物序號。
+    expect(parseMessage('運動清單').kind).toBe('listExercise');
+    expect(parseMessage('改運動 1 100').kind).toBe('editExercise');
+    expect(parseMessage('刪運動 1').kind).toBe('deleteExercise');
+    // 裸「運動 300」仍是記一筆運動,不受影響。
+    expect(parseMessage('運動 300')).toEqual({
+      kind: 'log',
+      items: [{ type: 'exercise', calories: 300, label: null }],
+    });
+  });
+
   it('刪範本 不可被「刪 N」誤判 (順序)', () => {
     // WHY: 兩者都以「刪」開頭,刪範本須先判,否則範本名被當成序號失敗。
     expect(parseMessage('刪範本 拿鐵').kind).toBe('deletePreset');
