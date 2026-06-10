@@ -5,6 +5,7 @@ import { currentStreak, streakBadge } from '../src/domain/streak';
 import { parseMessage } from '../src/domain/parse';
 import { dailyPraise, nearMissLine, overAchieveLine, NEAR_MISS_KCAL } from '../src/domain/praise';
 import { isDaySettled } from '../src/domain/schedule';
+import { cumulativeNetDeficit, weightProgress, KCAL_PER_KG } from '../src/domain/weight';
 
 describe('tdee', () => {
   it('用 Mifflin-St Jeor 算男性 BMR', () => {
@@ -331,5 +332,42 @@ describe('parseMessage — 控制指令', () => {
 
   it('純餐別關鍵字無內容 → help (沒東西可記)', () => {
     expect(parseMessage('午餐')).toEqual({ kind: 'help' });
+  });
+});
+
+describe('weight — 累積赤字換算公斤', () => {
+  it('累積淨赤字 = tdee×天數 + 運動 − 攝取 (四捨五入)', () => {
+    // WHY: 必須與每日卡/週報同一套帳 —— 每個有記錄日計一次基礎消耗,運動另外加。
+    // 1800×3 + 200 − 4000 = 1600
+    expect(cumulativeNetDeficit(1800, 3, 4000, 200)).toBe(1600);
+  });
+
+  it('恰好 7700 卡 → 減 1 公斤,且剛好踩線時不再倒數', () => {
+    // WHY: 7700 卡 ≈ 1 公斤是整個進度條的換算基準,踩線那一刻 remaining 應為 0 而非 7700。
+    const p = weightProgress(KCAL_PER_KG);
+    expect(p.kg).toBe(1);
+    expect(p.remainingKcal).toBe(0);
+  });
+
+  it('進度繞圈:跨過一公斤後重新倒數到下一公斤', () => {
+    // WHY: 終點線是「下一公斤」,1.5 公斤的人應顯示還差半公斤 (3850 卡),不是從零重算。
+    const p = weightProgress(KCAL_PER_KG + 3850); // 1.5 kg
+    expect(p.kg).toBeCloseTo(1.5, 5);
+    expect(p.remainingKcal).toBe(3850);
+  });
+
+  it('負赤字 = 增重,公斤為負且不顯示終點線倒數', () => {
+    // WHY: 吃超過消耗就是累積增重,進度條方向相反,不該謊報「快減一公斤」。
+    const p = weightProgress(-3850); // -0.5 kg
+    expect(p.kg).toBeCloseTo(-0.5, 5);
+    expect(p.kg).toBeLessThan(0);
+  });
+
+  it('剛起步 (赤字 0) → 0 公斤,正好在公斤邊界上 remaining=0', () => {
+    // WHY: 0 是公斤邊界,與 7700 同樣回 remaining=0;呼叫端 (flex) 靠 kg>0 才顯示終點線,
+    //      所以剛起步不會出現「再 0 卡達成」的怪句子。
+    const p = weightProgress(0);
+    expect(p.kg).toBe(0);
+    expect(p.remainingKcal).toBe(0);
   });
 });

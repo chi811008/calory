@@ -369,6 +369,46 @@ export async function sumExercise(env: Env, userId: string, date: string): Promi
   return Number(row?.total ?? 0);
 }
 
+export interface CumulativeStats {
+  daysLogged: number; // 有任何記錄 (食物或運動) 的不重複天數
+  totalIntake: number; // 全程攝取總和
+  totalBurn: number; // 全程運動消耗總和
+}
+
+/** 取得使用者全程累積統計 (跨所有日期),供「距離下一公斤」進度條換算。 */
+export async function getCumulativeStats(
+  env: Env,
+  userId: string,
+): Promise<CumulativeStats> {
+  const intakeRow = await env.DB.prepare(
+    'SELECT COALESCE(SUM(calories), 0) AS total FROM food_logs WHERE user_id = ?',
+  )
+    .bind(userId)
+    .first<{ total: number }>();
+
+  const burnRow = await env.DB.prepare(
+    'SELECT COALESCE(SUM(calories_burned), 0) AS total FROM exercise_logs WHERE user_id = ?',
+  )
+    .bind(userId)
+    .first<{ total: number }>();
+
+  const daysRow = await env.DB.prepare(
+    `SELECT COUNT(*) AS days FROM (
+       SELECT date FROM food_logs WHERE user_id = ?
+       UNION
+       SELECT date FROM exercise_logs WHERE user_id = ?
+     )`,
+  )
+    .bind(userId, userId)
+    .first<{ days: number }>();
+
+  return {
+    daysLogged: Number(daysRow?.days ?? 0),
+    totalIntake: Number(intakeRow?.total ?? 0),
+    totalBurn: Number(burnRow?.total ?? 0),
+  };
+}
+
 export interface DayTotals {
   intake: number;
   burn: number;

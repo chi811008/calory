@@ -1,5 +1,6 @@
 import type { DayResult } from '../domain/calories';
 import { dailyPraise, nearMissLine, overAchieveLine } from '../domain/praise';
+import { weightProgress } from '../domain/weight';
 
 // 即時回饋卡 (Flex Message)。遊戲化的核心視覺:大數字 + 進度條 + 連續天數。
 
@@ -23,6 +24,7 @@ export interface FeedbackData {
   targetDeficit: number;
   streak: number;
   badge?: string | null;
+  cumulativeDeficit?: number; // 全程累積淨赤字;有給才顯示「距離下一公斤」進度
   liffUrl?: string;
 }
 
@@ -108,6 +110,23 @@ export function feedbackFlex(d: FeedbackData): object {
     ],
   };
 
+  const detailRows: object[] = [
+    row('攝取', `${d.intake} 卡`),
+    row('支出', `${result.expenditure} 卡 (基礎 ${d.tdee}＋運動 ${d.exerciseBurn})`),
+    row('赤字', `${result.deficit} 卡 / 目標 ${d.targetDeficit}`),
+    row('連續達標', d.streak > 0 ? `🔥 ${d.streak} 天` : '尚未開始'),
+  ];
+
+  // 全程累積淨赤字 → 換算減重公斤,並在減重方向顯示「距離下一公斤」終點線。
+  const progress =
+    d.cumulativeDeficit !== undefined ? weightProgress(d.cumulativeDeficit) : null;
+  if (progress) {
+    const dir = progress.kg >= 0 ? '減' : '增';
+    detailRows.push(
+      row('累積淨赤字', `${d.cumulativeDeficit} 卡 ≈ ${dir} ${Math.abs(progress.kg).toFixed(2)} kg`),
+    );
+  }
+
   const bodyContents: object[] = [
     { type: 'text', text: d.headline, size: 'sm', color: COLOR.sub },
     { type: 'text', text: statusText, weight: 'bold', size: 'xl', color: statusColor, wrap: true },
@@ -117,14 +136,21 @@ export function feedbackFlex(d: FeedbackData): object {
       layout: 'vertical',
       spacing: 'sm',
       margin: 'lg',
-      contents: [
-        row('攝取', `${d.intake} 卡`),
-        row('支出', `${result.expenditure} 卡 (基礎 ${d.tdee}＋運動 ${d.exerciseBurn})`),
-        row('赤字', `${result.deficit} 卡 / 目標 ${d.targetDeficit}`),
-        row('連續達標', d.streak > 0 ? `🔥 ${d.streak} 天` : '尚未開始'),
-      ],
+      contents: detailRows,
     },
   ];
+
+  if (progress && progress.kg > 0) {
+    bodyContents.push({
+      type: 'text',
+      text: `🎯 再 ${progress.remainingKcal} 卡達成下一公斤`,
+      size: 'sm',
+      color: COLOR.met,
+      align: 'center',
+      wrap: true,
+      margin: 'md',
+    });
+  }
 
   for (const line of flair) {
     bodyContents.push({

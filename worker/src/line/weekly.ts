@@ -1,6 +1,5 @@
 import type { WeekSummary } from '../domain/weekly';
-
-const KCAL_PER_KG = 7700; // 每累積約 7700 卡 ≈ 體重 1 公斤
+import { KCAL_PER_KG } from '../domain/weight';
 
 /** 週報文字訊息。涵蓋區間 [from, to] 為使用者當地日期。 */
 export function weeklyMessage(summary: WeekSummary, from: string, to: string): object {

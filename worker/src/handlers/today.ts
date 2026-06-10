@@ -4,7 +4,15 @@ import { computeDay, type DayResult } from '../domain/calories';
 import { currentStreak, streakBadge, type DayMet } from '../domain/streak';
 import { localDate, addDays, localParts } from '../domain/date';
 import { isDaySettled } from '../domain/schedule';
-import { getDailyTotals, listTodayFood, sumExercise, sumFood, type DayTotals } from '../db/repo';
+import {
+  getCumulativeStats,
+  getDailyTotals,
+  listTodayFood,
+  sumExercise,
+  sumFood,
+  type DayTotals,
+} from '../db/repo';
+import { cumulativeNetDeficit } from '../domain/weight';
 import { feedbackFlex } from '../line/flex';
 import { replyMessage } from '../line/client';
 
@@ -18,6 +26,7 @@ export interface DaySummary {
   burn: number;
   streak: number;
   badge: string | null;
+  cumulativeDeficit: number; // 全程累積淨赤字 (跨所有日期),供「距離下一公斤」進度條
 }
 
 /** 建立 endDate 往回 [fromOffset..toOffset] 天的達標陣列 (升冪)。未記錄視為未達標,以中斷連續。 */
@@ -75,8 +84,25 @@ export async function computeDaySummary(
     if (result.met) streak += 1;
   }
 
+  const cum = await getCumulativeStats(env, user.lineUserId);
+  const cumulativeDeficit = cumulativeNetDeficit(
+    user.tdee,
+    cum.daysLogged,
+    cum.totalIntake,
+    cum.totalBurn,
+  );
+
   const settled = isDaySettled(closed, localParts(user.tz).hour, user.bedtimeHour);
-  return { date, settled, result, intake, burn, streak, badge: streakBadge(streak) };
+  return {
+    date,
+    settled,
+    result,
+    intake,
+    burn,
+    streak,
+    badge: streakBadge(streak),
+    cumulativeDeficit,
+  };
 }
 
 /** 把日收支組成回饋卡 (Flex)。即時回覆與排程推播共用。 */
@@ -97,6 +123,7 @@ export function daySummaryFlex(
     targetDeficit: user.targetDeficit,
     streak: s.streak,
     badge: s.badge,
+    cumulativeDeficit: s.cumulativeDeficit,
     liffUrl,
   });
 }
