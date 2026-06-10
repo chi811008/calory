@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS meal_presets (
   calories   INTEGER NOT NULL,
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+-- 同一使用者同名只留一筆,支援 upsert (存相同名稱即覆蓋熱量)。
+CREATE UNIQUE INDEX IF NOT EXISTS idx_preset_user_label ON meal_presets(user_id, label);
 
 CREATE TABLE IF NOT EXISTS pending_photo (
   user_id       TEXT PRIMARY KEY,

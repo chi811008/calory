@@ -20,33 +20,17 @@ function bytesToBase64(buf: ArrayBuffer): string {
   return btoa(bin);
 }
 
+const TEXT_PROMPT =
+  '你是營養估算助手。根據以下食物文字描述,估算「總熱量(大卡)」與「簡短中文品名」。' +
+  '份量詞 (小碗/中份/一瓶) 請納入估算。只回傳 JSON,格式為 {"label":"品名","calories":整數大卡}。' +
+  '若無法判斷是食物,calories 請回 0。食物描述:';
+
 interface GeminiResponse {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
 }
 
-export async function estimateCalories(
-  apiKey: string,
-  bytes: ArrayBuffer,
-  mime: string,
-): Promise<PhotoEstimate | null> {
-  if (!apiKey) {
-    console.error('GEMINI_API_KEY not configured');
-    return null;
-  }
-
+async function callGemini(apiKey: string, body: unknown): Promise<PhotoEstimate | null> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [
-      {
-        parts: [
-          { text: PROMPT },
-          { inline_data: { mime_type: mime, data: bytesToBase64(bytes) } },
-        ],
-      },
-    ],
-    generationConfig: { responseMimeType: 'application/json' },
-  };
-
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -67,4 +51,44 @@ export async function estimateCalories(
     console.error('gemini returned non-JSON', err);
     return null;
   }
+}
+
+/** 從文字食物描述估熱量 (沒給數字時用)。重用同一套正規化把關。失敗回 null。 */
+export async function estimateCaloriesFromText(
+  apiKey: string,
+  label: string,
+): Promise<PhotoEstimate | null> {
+  if (!apiKey) {
+    console.error('GEMINI_API_KEY not configured');
+    return null;
+  }
+  const body = {
+    contents: [{ parts: [{ text: TEXT_PROMPT + label }] }],
+    generationConfig: { responseMimeType: 'application/json' },
+  };
+  return callGemini(apiKey, body);
+}
+
+export async function estimateCalories(
+  apiKey: string,
+  bytes: ArrayBuffer,
+  mime: string,
+): Promise<PhotoEstimate | null> {
+  if (!apiKey) {
+    console.error('GEMINI_API_KEY not configured');
+    return null;
+  }
+
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: PROMPT },
+          { inline_data: { mime_type: mime, data: bytesToBase64(bytes) } },
+        ],
+      },
+    ],
+    generationConfig: { responseMimeType: 'application/json' },
+  };
+  return callGemini(apiKey, body);
 }

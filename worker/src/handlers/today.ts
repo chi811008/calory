@@ -1,8 +1,9 @@
 import type { Env, User } from '../types';
+import { MEAL_LABELS } from '../types';
 import { computeDay, type DayResult } from '../domain/calories';
 import { currentStreak, streakBadge, type DayMet } from '../domain/streak';
 import { localDate, addDays } from '../domain/date';
-import { getDailyTotals, sumExercise, sumFood, type DayTotals } from '../db/repo';
+import { getDailyTotals, listTodayFood, sumExercise, sumFood, type DayTotals } from '../db/repo';
 import { feedbackFlex } from '../line/flex';
 import { replyMessage } from '../line/client';
 
@@ -94,7 +95,7 @@ export function daySummaryFlex(
   });
 }
 
-/** 計算今日收支,組出即時回饋卡並回覆。logFood / logExercise / handleToday 共用。 */
+/** 計算今日收支,組出即時回饋卡並回覆。logFood / editFood / handleToday 共用。 */
 export async function replyDaySummary(
   env: Env,
   user: User,
@@ -108,5 +109,25 @@ export async function replyDaySummary(
 }
 
 export async function handleToday(env: Env, user: User, replyToken: string): Promise<void> {
-  await replyDaySummary(env, user, replyToken, '今日進度');
+  const today = localDate(user.tz);
+  const rows = await listTodayFood(env, user.lineUserId, today);
+  const summary = await computeDaySummary(env, user, today, false);
+  const flex = daySummaryFlex('今日進度', user, summary, env.LIFF_URL);
+
+  // 有食物記錄時,附上帶編號的清單,供「改 N / 刪 N」指定要改哪一筆。
+  const messages: object[] = [];
+  if (rows.length > 0) {
+    const lines = [
+      '🍽️ 今日食物記錄',
+      ...rows.map((r, i) => {
+        const name = r.label ? `${MEAL_LABELS[r.meal]}・${r.label}` : MEAL_LABELS[r.meal];
+        return `${i + 1}. ${name} ${r.calories} 卡`;
+      }),
+      '',
+      '改：改 2 500　刪：刪 3',
+    ];
+    messages.push({ type: 'text', text: lines.join('\n') });
+  }
+  messages.push(flex);
+  await replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, messages);
 }

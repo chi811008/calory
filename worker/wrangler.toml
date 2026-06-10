@@ -7,15 +7,26 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "calory-db"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "06850ef5-d387-49ea-8b0d-42bb180968f1"
 
 # 每小時觸發一次,用於依使用者當地時間推播日報/週報/睡前提醒 (Phase 3)。
 [triggers]
 crons = ["0 * * * *"]
 
+# web/dashboard.html 以 Text 模組形式被 src/index.ts import 成字串後由 Worker 直接回傳。
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
 [vars]
-# 非機密的公開變數。LIFF 儀表板網址 (Phase 5) 之後填入。
-LIFF_URL = ""
+# 非機密的公開變數 (Phase 5 LIFF 儀表板)。
+# LIFF_URL:回饋卡「看圖表」按鈕開啟的網址 = 你的 LIFF app 連結 (https://liff.line.me/<liffId>)。
+LIFF_URL = "https://liff.line.me/2010351068-uLEJsi2G"
+# LIFF_ID:前端 liff.init({ liffId }) 用,= LINE 開發者後台建立 LIFF app 後的 LIFF ID。
+LIFF_ID = "2010351068-uLEJsi2G"
+# LIFF_CHANNEL_ID:驗證 id_token 用 = LIFF 所屬的 LINE Login channel ID (數字)。
+LIFF_CHANNEL_ID = "2010351068"
 
 # 機密請用 `wrangler secret put` 設定,不要寫在這裡:
 #   wrangler secret put LINE_CHANNEL_SECRET

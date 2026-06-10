@@ -6,6 +6,9 @@ export interface Env {
   LINE_CHANNEL_ACCESS_TOKEN: string;
   GEMINI_API_KEY: string;
   LIFF_URL?: string;
+  // LIFF 儀表板 (Phase 5):
+  LIFF_ID?: string; // 前端 liff.init({ liffId }) 用
+  LIFF_CHANNEL_ID?: string; // 驗證 id_token 的 aud (LINE Login channel id)
 }
 
 export type Sex = 'male' | 'female';

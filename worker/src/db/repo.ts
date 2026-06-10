@@ -195,6 +195,115 @@ export async function insertExercise(
     .run();
 }
 
+export interface Preset {
+  label: string;
+  calories: number;
+}
+
+/** 查單筆範本 (精確比對 label;呼叫端先 trim)。 */
+export async function findPreset(
+  env: Env,
+  userId: string,
+  label: string,
+): Promise<Preset | null> {
+  const row = await env.DB.prepare(
+    'SELECT label, calories FROM meal_presets WHERE user_id = ? AND label = ?',
+  )
+    .bind(userId, label)
+    .first<{ label: string; calories: number }>();
+  return row ? { label: row.label, calories: Number(row.calories) } : null;
+}
+
+/** 存/覆蓋範本 (同名 upsert,靠 idx_preset_user_label 唯一索引)。 */
+export async function savePreset(
+  env: Env,
+  userId: string,
+  label: string,
+  calories: number,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO meal_presets (user_id, label, calories) VALUES (?, ?, ?)
+       ON CONFLICT(user_id, label)
+       DO UPDATE SET calories = excluded.calories, created_at = datetime('now')`,
+  )
+    .bind(userId, label, calories)
+    .run();
+}
+
+export async function listPresets(env: Env, userId: string): Promise<Preset[]> {
+  const res = await env.DB.prepare(
+    'SELECT label, calories FROM meal_presets WHERE user_id = ? ORDER BY label',
+  )
+    .bind(userId)
+    .all<{ label: string; calories: number }>();
+  return (res.results ?? []).map((r) => ({ label: r.label, calories: Number(r.calories) }));
+}
+
+/** 刪範本。回傳 true 代表確實刪了一筆 (供 handler 區分「找不到」)。 */
+export async function deletePreset(
+  env: Env,
+  userId: string,
+  label: string,
+): Promise<boolean> {
+  const res = await env.DB.prepare(
+    'DELETE FROM meal_presets WHERE user_id = ? AND label = ?',
+  )
+    .bind(userId, label)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+export interface FoodRow {
+  id: number;
+  meal: Meal;
+  label: string | null;
+  calories: number;
+  source: string;
+}
+
+/** 取某日的食物記錄,依 id 升冪 (提供穩定的「今日序號 → id」對應,供改/刪用)。 */
+export async function listTodayFood(
+  env: Env,
+  userId: string,
+  date: string,
+): Promise<FoodRow[]> {
+  const res = await env.DB.prepare(
+    'SELECT id, meal, label, calories, source FROM food_logs WHERE user_id = ? AND date = ? ORDER BY id',
+  )
+    .bind(userId, date)
+    .all<Row>();
+  return (res.results ?? []).map((r) => ({
+    id: Number(r.id),
+    meal: r.meal as Meal,
+    label: r.label === null || r.label === undefined ? null : String(r.label),
+    calories: Number(r.calories),
+    source: String(r.source),
+  }));
+}
+
+/** 改某筆食物熱量。WHERE 帶 user_id 確保不會動到別人的記錄。回傳是否有更新。 */
+export async function updateFood(
+  env: Env,
+  userId: string,
+  id: number,
+  calories: number,
+): Promise<boolean> {
+  const res = await env.DB.prepare(
+    'UPDATE food_logs SET calories = ? WHERE id = ? AND user_id = ?',
+  )
+    .bind(calories, id, userId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+/** 刪某筆食物。WHERE 帶 user_id 確保隔離。回傳是否有刪除。 */
+export async function deleteFood(env: Env, userId: string, id: number): Promise<boolean> {
+  const res = await env.DB.prepare('DELETE FROM food_logs WHERE id = ? AND user_id = ?')
+    .bind(id, userId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
 export async function sumFood(env: Env, userId: string, date: string): Promise<number> {
   const row = await env.DB.prepare(
     'SELECT COALESCE(SUM(calories), 0) AS total FROM food_logs WHERE user_id = ? AND date = ?',

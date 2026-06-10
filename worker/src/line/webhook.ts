@@ -1,10 +1,15 @@
 import type { Env } from '../types';
 import { ensureUser, getOnboarding, getPendingPhoto } from '../db/repo';
-import { parseCommand, parsePhotoReply } from '../domain/parse';
+import { parseMessage, parsePhotoReply } from '../domain/parse';
 import { isPendingFresh } from '../domain/photo';
-import { handleFood } from '../handlers/logFood';
-import { handleExercise } from '../handlers/logExercise';
+import { handleLog } from '../handlers/logFood';
 import { handleToday } from '../handlers/today';
+import {
+  handleSavePreset,
+  handleListPresets,
+  handleDeletePreset,
+} from '../handlers/presets';
+import { handleEditFood, handleDeleteFood } from '../handlers/editFood';
 import { startOnboarding, handleOnboarding } from '../handlers/onboarding';
 import { handlePhoto, confirmPhoto, cancelPhoto } from '../handlers/photo';
 import { replyMessage } from './client';
@@ -37,19 +42,27 @@ export async function handleEvent(event: any, env: Env): Promise<void> {
       if (reply.kind === 'cancel') return cancelPhoto(env, userId, replyToken);
     }
 
-    const cmd = parseCommand(text);
+    const cmd = parseMessage(text);
     // 主動打「設定」或尚未完成個人化引導 → 開始引導。
     if (cmd.kind === 'settings' || !user.onboarded) {
       return startOnboarding(env, userId, replyToken);
     }
 
     switch (cmd.kind) {
-      case 'food':
-        return handleFood(env, user, cmd, replyToken);
-      case 'exercise':
-        return handleExercise(env, user, cmd, replyToken);
+      case 'log':
+        return handleLog(env, user, cmd.items, replyToken);
       case 'today':
         return handleToday(env, user, replyToken);
+      case 'savePreset':
+        return handleSavePreset(env, user, cmd.label, cmd.calories, replyToken);
+      case 'listPresets':
+        return handleListPresets(env, user, replyToken);
+      case 'deletePreset':
+        return handleDeletePreset(env, user, cmd.label, replyToken);
+      case 'editFood':
+        return handleEditFood(env, user, cmd.index, cmd.calories, replyToken);
+      case 'deleteFood':
+        return handleDeleteFood(env, user, cmd.index, replyToken);
       default:
         return replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [helpMessage()]);
     }
