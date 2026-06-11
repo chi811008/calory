@@ -123,8 +123,8 @@
 
     .chart-wrap { width: 100%; }
     svg { width: 100%; height: auto; display: block; }
-    .axis-label { fill: var(--sub); font-size: 9px; }
-    .target-label { fill: var(--near); font-size: 9px; font-weight: 700; }
+    .axis-label { fill: var(--sub); font-size: 27px; }
+    .target-label { fill: var(--near); font-size: 27px; font-weight: 700; }
 
     .legend {
       display: flex;
@@ -177,8 +177,8 @@
     }
 
     function renderChart(series, target) {
-      var W = 480, H = 240;
-      var padL = 8, padR = 8, padTop = 18, padBottom = 22;
+      var W = 480, H = 290;
+      var padL = 8, padR = 8, padTop = 34, padBottom = 50;
       var n = series.length;
       var plotW = W - padL - padR;
       var plotH = H - padTop - padBottom;
@@ -199,13 +199,13 @@
       parts.push('<line x1="' + padL + '" y1="' + targetY.toFixed(1) + '" x2="' + (W - padR) +
         '" y2="' + targetY.toFixed(1) + '" stroke="' + COLOR.near +
         '" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>');
-      parts.push('<text class="target-label" x="' + padL + '" y="' + (targetY - 4).toFixed(1) +
+      parts.push('<text class="target-label" x="' + padL + '" y="' + (targetY - 8).toFixed(1) +
         '">目標 ' + target + '</text>');
       // 零線
       parts.push('<line x1="' + padL + '" y1="' + zeroY.toFixed(1) + '" x2="' + (W - padR) +
         '" y2="' + zeroY.toFixed(1) + '" stroke="' + COLOR.track + '" stroke-width="1"/>');
 
-      var labelEvery = n <= 7 ? 1 : (n <= 14 ? 2 : 5);
+      var labelEvery = n <= 7 ? 2 : (n <= 14 ? 4 : 8);
       for (var i = 0; i < n; i++) {
         var p = series[i];
         var cx = padL + slot * i + slot / 2;
@@ -223,7 +223,7 @@
             '" r="1.6" fill="' + COLOR.track + '"/>');
         }
         if (i % labelEvery === 0 || i === n - 1) {
-          parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (H - 7) +
+          parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (H - 14) +
             '" text-anchor="middle">' + fmtDay(p.date) + '</text>');
         }
       }
@@ -233,8 +233,8 @@
     }
 
     function renderMealChart(meals) {
-      var W = 480, H = 220;
-      var padL = 8, padR = 8, padTop = 22, padBottom = 24;
+      var W = 480, H = 260;
+      var padL = 8, padR = 8, padTop = 46, padBottom = 46;
       var n = meals.length;
       var plotW = W - padL - padR;
       var plotH = H - padTop - padBottom;
@@ -267,9 +267,9 @@
         }
         // 卡數標於條頂
         parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' +
-          (top - 5).toFixed(1) + '" text-anchor="middle">' + m.calories + '</text>');
+          (top - 8).toFixed(1) + '" text-anchor="middle">' + m.calories + '</text>');
         // 餐別名標於底
-        parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (H - 7) +
+        parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (H - 14) +
           '" text-anchor="middle">' + m.label + '</text>');
       }
 
@@ -325,12 +325,12 @@
       var meals = data.meals || [];
       var hasMeal = meals.some(function (m) { return m.calories > 0; });
       html += '<div class="chart-card" style="margin-top:14px">' +
-        '<div class="chart-head"><h2>各餐別攝取</h2>' +
-        '<span class="hint">近 ' + state.range + ' 天</span></div>';
+        '<div class="chart-head"><h2>今日各餐別攝取</h2>' +
+        '<span class="hint">今天</span></div>';
       if (hasMeal) {
         html += '<div class="chart-wrap">' + renderMealChart(meals) + '</div>';
       } else {
-        html += '<div class="empty-note">這段期間還沒有飲食記錄 🍽️</div>';
+        html += '<div class="empty-note">今天還沒有飲食記錄 🍽️</div>';
       }
       html += '</div>'; // /chart-card (各餐別)
 

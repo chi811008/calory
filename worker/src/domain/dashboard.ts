@@ -31,7 +31,7 @@ export interface Dashboard {
   tdee: number;
   target: number; // 目標赤字
   series: DashboardPoint[]; // 升冪, 長度 = rangeDays, 未記錄日以 0 補
-  meals: MealBar[]; // 區間內各餐別總攝取, 固定 5 類順序, 缺的補 0
+  meals: MealBar[]; // 今日各餐別攝取, 固定 5 類順序, 缺的補 0
   week: WeekSummary; // 最近 7 天 (僅計有記錄日)
   streak: number;
   badge: string | null;

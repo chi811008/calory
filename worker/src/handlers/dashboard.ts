@@ -33,9 +33,8 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
     const fromDate = addDays(today, -(WINDOW_DAYS - 1));
     const totals = await getDailyTotals(env, userId, fromDate, today);
 
-    // 餐別圖只看使用者選的區間 (7/14/30), 與每日赤字圖對齊。
-    const mealFrom = addDays(today, -(rangeDays - 1));
-    const mealTotals = await getMealTotals(env, userId, mealFrom, today);
+    // 餐別圖只看今天:顯示今日各餐別各吃了多少卡。
+    const mealTotals = await getMealTotals(env, userId, today, today);
 
     const dates: string[] = [];
     for (let i = WINDOW_DAYS - 1; i >= 0; i--) dates.push(addDays(today, -i));
