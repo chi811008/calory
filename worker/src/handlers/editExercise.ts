@@ -35,8 +35,6 @@ export async function handleListExercise(
     '🏃 今日運動記錄',
     ...rows.map((r, i) => `${i + 1}. ${r.label ?? '運動'} 消耗 ${r.caloriesBurned} 卡`),
     `　共消耗 ${total} 卡`,
-    '',
-    '改：改運動 2 250　刪：刪運動 3',
   ];
   await replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [
     { type: 'text', text: lines.join('\n') },
