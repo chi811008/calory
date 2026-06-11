@@ -28,6 +28,13 @@ export interface MealBar {
   calories: number;
 }
 
+export interface MealDay {
+  date: string; // YYYY-MM-DD
+  meals: MealBar[]; // 該日各餐別攝取, 固定 5 類順序, 缺的補 0
+}
+
+const MEAL_WINDOW_DAYS = 7; // 各餐別圖保留過往 7 天 (今天 + 前 6 天), 每天一個 tab
+
 export interface GoalProgress {
   goalKg: number; // 目標減重公斤數
   lostKg: number; // 全程累積已減公斤 (可負:淨增重)
@@ -39,7 +46,7 @@ export interface Dashboard {
   tdee: number;
   target: number; // 目標赤字
   series: DashboardPoint[]; // 升冪, 長度 = rangeDays, 未記錄日以 0 補
-  meals: MealBar[]; // 今日各餐別攝取, 固定 5 類順序, 缺的補 0
+  mealDays: MealDay[]; // 過往 7 天各餐別攝取 (升冪, 末筆=今天), 每天一個 tab
   goal: GoalProgress | null; // 減重目標愛心進度 (全程累積); 未設定目標則為 null
   week: WeekSummary; // 最近 7 天 (僅計有記錄日)
   streak: number;
@@ -62,9 +69,10 @@ export function buildDashboard(
   tdee: number,
   targetDeficit: number,
   rangeDays: number,
-  mealTotals: Map<Meal, number>,
+  mealDayTotals: Map<string, Map<Meal, number>>, // 過往 7 天的「日×餐別」攝取
   goalKg = 0, // 0 = 未設定減重目標
   cumulativeDeficit = 0, // 全程累積淨赤字 (跨所有日期), 換算愛心進度用
+  todaySettled = false, // 今天是否已結算 (睡前統計窗); 未結算則今天不計入 streak
 ): Dashboard {
   const allPoints: DashboardPoint[] = dates.map((date) => {
     const t = totals.get(date);
@@ -76,11 +84,12 @@ export function buildDashboard(
     return { date, logged: true, intake: t.intake, burn: t.burn, deficit: r.deficit, met: r.met };
   });
 
-  // streak:看到昨天為止的連續達標 (未記錄日 → 未達標 → 中斷),今日若已達標再 +1。
+  // streak:看到昨天為止的連續達標 (未記錄日 → 未達標 → 中斷)。今天要等結算後
+  // (睡前統計窗) 且達標才 +1;白天進行中即使達標也先不加 (與 today.ts 一致)。
   const metDays: DayMet[] = allPoints.map((p) => ({ date: p.date, met: p.met }));
   let streak = currentStreak(metDays.slice(0, -1));
   const todayMet = metDays[metDays.length - 1]?.met ?? false;
-  if (todayMet) streak += 1;
+  if (todayMet && todaySettled) streak += 1;
 
   // week:最近 7 天中有記錄的日子。
   const weekDays: DayTotals[] = dates
@@ -89,12 +98,18 @@ export function buildDashboard(
     .filter((t): t is DayTotals => t !== undefined);
   const week = summarizeWeek(weekDays, tdee, targetDeficit);
 
-  // 各餐別:固定 5 類順序輸出, 缺的餐別補 0。
-  const meals: MealBar[] = MEAL_ORDER.map((meal) => ({
-    meal,
-    label: MEAL_LABELS[meal],
-    calories: mealTotals.get(meal) ?? 0,
-  }));
+  // 各餐別:過往 7 天 (今天 + 前 6 天),每天 5 類固定順序、缺的補 0。
+  const mealDays: MealDay[] = dates.slice(-MEAL_WINDOW_DAYS).map((date) => {
+    const dayTotals = mealDayTotals.get(date);
+    return {
+      date,
+      meals: MEAL_ORDER.map((meal) => ({
+        meal,
+        label: MEAL_LABELS[meal],
+        calories: dayTotals?.get(meal) ?? 0,
+      })),
+    };
+  });
 
   // 減重目標愛心:全程累積淨赤字 ÷ 7700 = 已減公斤, 分配到 goalKg 顆愛心。
   const lostKg = cumulativeDeficit / KCAL_PER_KG;
@@ -107,7 +122,7 @@ export function buildDashboard(
     tdee,
     target: targetDeficit,
     series: allPoints.slice(-rangeDays),
-    meals,
+    mealDays,
     goal,
     week,
     streak,

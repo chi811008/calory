@@ -1,14 +1,16 @@
 import type { Env } from '../types';
 import { verifyIdToken } from '../line/verify';
-import { ensureUser, getDailyTotals, getMealTotals, getCumulativeStats } from '../db/repo';
-import { localDate, addDays } from '../domain/date';
+import { ensureUser, getDailyTotals, getMealTotalsByDay, getCumulativeStats } from '../db/repo';
+import { localDate, addDays, localParts } from '../domain/date';
 import { buildDashboard } from '../domain/dashboard';
 import { cumulativeNetDeficit } from '../domain/weight';
+import { isDaySettled } from '../domain/schedule';
 
 // LIFF 儀表板資料 API。前端帶 LINE id_token (Authorization: Bearer ...) 來,
 // 後端驗證換出 userId 後才查資料,確保資料隔離。
 
 const WINDOW_DAYS = 30; // 固定查 30 天:涵蓋最大圖表區間, 同時供 streak/week 計算。
+const MEAL_WINDOW_DAYS = 7; // 各餐別圖保留過往 7 天 (今天 + 前 6 天)。
 const ALLOWED_RANGES = [7, 14, 30];
 const DEFAULT_RANGE = 14;
 
@@ -34,8 +36,9 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
     const fromDate = addDays(today, -(WINDOW_DAYS - 1));
     const totals = await getDailyTotals(env, userId, fromDate, today);
 
-    // 餐別圖只看今天:顯示今日各餐別各吃了多少卡。
-    const mealTotals = await getMealTotals(env, userId, today, today);
+    // 各餐別圖:保留過往 7 天 (今天 + 前 6 天),每天一個 tab。
+    const mealFrom = addDays(today, -(MEAL_WINDOW_DAYS - 1));
+    const mealDayTotals = await getMealTotalsByDay(env, userId, mealFrom, today);
 
     // 減重目標愛心:用全程累積淨赤字 (與每日卡的「累積淨赤字」同一套帳), 不隨區間變。
     const cum = await getCumulativeStats(env, userId);
@@ -46,6 +49,9 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
       cum.totalBurn,
     );
 
+    // 今天是否已結算 (睡前統計窗):未結算前今天不計入 streak。
+    const todaySettled = isDaySettled(false, localParts(user.tz).hour, user.bedtimeHour);
+
     const dates: string[] = [];
     for (let i = WINDOW_DAYS - 1; i >= 0; i--) dates.push(addDays(today, -i));
 
@@ -55,9 +61,10 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
       user.tdee,
       user.targetDeficit,
       rangeDays,
-      mealTotals,
+      mealDayTotals,
       user.goalKg,
       cumulativeDeficit,
+      todaySettled,
     );
     return json({ success: true, data: dashboard });
   } catch (err) {

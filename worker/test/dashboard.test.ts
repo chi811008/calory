@@ -3,7 +3,7 @@ import { buildDashboard } from '../src/domain/dashboard';
 import type { DayTotals } from '../src/db/repo';
 import type { Meal } from '../src/types';
 
-const NO_MEALS = new Map<Meal, number>();
+const NO_MEALS = new Map<string, Map<Meal, number>>();
 
 // 建一段升冪日期 (endDate 往回 n 天, 含 endDate), 最後一天為「今日」。
 function rangeDates(endDate: string, n: number): string[] {
@@ -69,14 +69,28 @@ describe('buildDashboard', () => {
     expect(d.series[d.series.length - 1].met).toBe(false);
   });
 
-  it('今日已達標時 streak 含今日 +1', () => {
+  it('今日已達標但「尚未結算」→ 今天先不計入 (只到昨天)', () => {
+    // WHY: 中午剛好低於目標不算數, 避免晚餐吃爆後的虛加; 結算前今天不 +1。
     const dates = rangeDates('2026-06-02', 30);
     const totals = new Map<string, DayTotals>();
     totals.set('2026-05-31', { intake: 1000, burn: 0 });
     totals.set('2026-06-01', { intake: 1000, burn: 0 });
-    totals.set('2026-06-02', { intake: 1000, burn: 0 }); // 今日也達標
+    totals.set('2026-06-02', { intake: 1000, burn: 0 }); // 今日達標但未結算
 
+    // todaySettled 預設 false
     const d = buildDashboard(dates, totals, TDEE, TARGET, 14, NO_MEALS);
+    expect(d.streak).toBe(2);
+  });
+
+  it('今日已達標且「已結算」(睡前統計後) → streak 含今日 +1', () => {
+    const dates = rangeDates('2026-06-02', 30);
+    const totals = new Map<string, DayTotals>();
+    totals.set('2026-05-31', { intake: 1000, burn: 0 });
+    totals.set('2026-06-01', { intake: 1000, burn: 0 });
+    totals.set('2026-06-02', { intake: 1000, burn: 0 });
+
+    // 第 9 個參數 todaySettled = true
+    const d = buildDashboard(dates, totals, TDEE, TARGET, 14, NO_MEALS, 0, 0, true);
     expect(d.streak).toBe(3);
   });
 
@@ -105,37 +119,43 @@ describe('buildDashboard', () => {
     expect(d.badge).toBeNull();
   });
 
-  it('meals: 固定 5 類順序與標籤, 缺的餐別補 0', () => {
+  it('mealDays: 過往 7 天 (末筆=今天), 每天 5 類固定順序與標籤, 缺的補 0', () => {
     const dates = rangeDates('2026-06-02', 30);
-    const mealTotals = new Map<Meal, number>([
-      ['breakfast', 300],
-      ['dinner', 700],
-      ['drink', 150],
+    const mealDayTotals = new Map<string, Map<Meal, number>>([
+      ['2026-06-02', new Map<Meal, number>([['breakfast', 300], ['dinner', 700], ['drink', 150]])],
+      ['2026-05-30', new Map<Meal, number>([['lunch', 500]])],
     ]);
 
-    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, mealTotals);
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, mealDayTotals);
 
-    // 固定順序: 早餐/午餐/晚餐/點心/飲料
-    expect(d.meals.map((m) => m.meal)).toEqual([
+    // 7 天, 升冪, 末筆 = 今天
+    expect(d.mealDays).toHaveLength(7);
+    const today = d.mealDays[6];
+    expect(today.date).toBe('2026-06-02');
+    // 固定順序與標籤
+    expect(today.meals.map((m) => m.meal)).toEqual([
       'breakfast',
       'lunch',
       'dinner',
       'snack',
       'drink',
     ]);
-    expect(d.meals.map((m) => m.label)).toEqual(['早餐', '午餐', '晚餐', '點心', '飲料']);
-    // 有記錄的餐別帶入數值, 缺的補 0
-    expect(d.meals.map((m) => m.calories)).toEqual([300, 0, 700, 0, 150]);
-    // 加總與輸入一致
-    const sum = d.meals.reduce((acc, m) => acc + m.calories, 0);
-    expect(sum).toBe(1150);
+    expect(today.meals.map((m) => m.label)).toEqual(['早餐', '午餐', '晚餐', '點心', '飲料']);
+    // 今天:有記錄的餐別帶入, 缺的補 0;加總一致
+    expect(today.meals.map((m) => m.calories)).toEqual([300, 0, 700, 0, 150]);
+    expect(today.meals.reduce((a, m) => a + m.calories, 0)).toBe(1150);
+    // 5/30 只記午餐, 其餘 0;且各自獨立 (不會混到別天)
+    const d530 = d.mealDays.find((x) => x.date === '2026-05-30')!;
+    expect(d530.meals.map((m) => m.calories)).toEqual([0, 500, 0, 0, 0]);
   });
 
-  it('meals: 空資料時 5 類皆 0', () => {
+  it('mealDays: 完全沒記錄 → 7 天每天 5 類皆 0', () => {
     const dates = rangeDates('2026-06-02', 30);
     const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS);
-    expect(d.meals).toHaveLength(5);
-    expect(d.meals.every((m) => m.calories === 0)).toBe(true);
+    expect(d.mealDays).toHaveLength(7);
+    expect(
+      d.mealDays.every((day) => day.meals.length === 5 && day.meals.every((m) => m.calories === 0)),
+    ).toBe(true);
   });
 
   it('goal: 未設定目標 (goalKg=0) → goal 為 null', () => {

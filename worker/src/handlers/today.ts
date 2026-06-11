@@ -56,8 +56,9 @@ function metRange(
 
 /**
  * 算出某日的收支與連續達標。
- * - closed=false (進行中的今日):連續天數 = 截至昨天的連續達標,今天若已達標再 +1
- *   (避免白天進行中就把連續歸零)。
+ * - closed=false (進行中的今日):連續天數 = 截至昨天的連續達標;今天**要等結算後**
+ *   (睡前統計窗, 見 isDaySettled) 且達標才 +1。白天進行中即使此刻低於目標也先不加,
+ *   避免「中午達標 → 晚餐吃爆」的虛加;未達標也不歸零 (進行中保留昨天為止的連續)。
  * - closed=true (已結束的某日,如昨日報):直接以「含當日」的連續達標計算,未達標即歸零。
  */
 export async function computeDaySummary(
@@ -75,13 +76,17 @@ export async function computeDaySummary(
     targetDeficit: user.targetDeficit,
   });
 
+  // 今天是否已結算 (睡前統計窗)。closed 的日子一律視為已結算。
+  const settled = isDaySettled(closed, localParts(user.tz).hour, user.bedtimeHour);
+
   const totals = await getDailyTotals(env, user.lineUserId, addDays(date, -STREAK_WINDOW_DAYS), date);
   let streak: number;
   if (closed) {
     streak = currentStreak(metRange(date, STREAK_WINDOW_DAYS, 0, totals, user));
   } else {
     streak = currentStreak(metRange(date, STREAK_WINDOW_DAYS, 1, totals, user));
-    if (result.met) streak += 1;
+    // 結算後才把今天計入;未結算前即使達標也先不 +1。
+    if (result.met && settled) streak += 1;
   }
 
   const cum = await getCumulativeStats(env, user.lineUserId);
@@ -92,7 +97,6 @@ export async function computeDaySummary(
     cum.totalBurn,
   );
 
-  const settled = isDaySettled(closed, localParts(user.tz).hour, user.bedtimeHour);
   return {
     date,
     settled,

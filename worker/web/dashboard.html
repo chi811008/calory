@@ -121,6 +121,10 @@
     }
     .seg button:focus-visible { outline: 2px solid var(--met); outline-offset: 2px; }
 
+    /* 各餐別的 7 日期 tab:撐滿一列, 窄螢幕可橫向捲動 */
+    .daytabs { display: flex; width: 100%; margin: 2px 0 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .daytabs button { flex: 1 0 auto; white-space: nowrap; }
+
     .chart-wrap { width: 100%; }
     svg { width: 100%; height: auto; display: block; }
     .axis-label { fill: var(--sub); font-size: 27px; }
@@ -165,7 +169,7 @@
       breakfast: '#F59E0B', lunch: '#16A34A', dinner: '#6366F1',
       snack: '#EC4899', drink: '#06B6D4'
     };
-    var state = { range: 14, idToken: null };
+    var state = { range: 14, idToken: null, data: null, mealDay: null };
 
     function el(id) { return document.getElementById(id); }
     function showMsg(text, isError) {
@@ -375,16 +379,28 @@
       }
       html += '</div>'; // /chart-card (每日赤字)
 
-      // 各餐別攝取圖卡
-      var meals = data.meals || [];
-      var hasMeal = meals.some(function (m) { return m.calories > 0; });
+      // 各餐別攝取圖卡:過往 7 天, 每天一個 tab (末筆=今天)。
+      var mealDays = data.mealDays || [];
+      var di = state.mealDay;
+      if (di == null || di < 0 || di >= mealDays.length) di = mealDays.length - 1; // 預設今天
+      var dayMeals = mealDays[di] ? mealDays[di].meals : [];
+      var hasMeal = dayMeals.some(function (m) { return m.calories > 0; });
+      var isToday = di === mealDays.length - 1;
       html += '<div class="chart-card" style="margin-top:14px">' +
-        '<div class="chart-head"><h2>今日各餐別攝取</h2>' +
-        '<span class="hint">今天</span></div>';
+        '<div class="chart-head"><h2>各餐別攝取</h2>' +
+        '<span class="hint">' + (isToday ? '今天' : fmtDay(mealDays[di].date)) + '</span></div>';
+      // 7 個日期 tab
+      html += '<div class="seg daytabs" role="group" aria-label="選擇日期">';
+      for (var mi = 0; mi < mealDays.length; mi++) {
+        var last = mi === mealDays.length - 1;
+        html += '<button data-mealday="' + mi + '" aria-pressed="' + (mi === di) + '">' +
+          (last ? '今天' : fmtDay(mealDays[mi].date)) + '</button>';
+      }
+      html += '</div>';
       if (hasMeal) {
-        html += '<div class="chart-wrap">' + renderMealChart(meals) + '</div>';
+        html += '<div class="chart-wrap">' + renderMealChart(dayMeals) + '</div>';
       } else {
-        html += '<div class="empty-note">今天還沒有飲食記錄 🍽️</div>';
+        html += '<div class="empty-note">' + (isToday ? '今天' : '這天') + '還沒有飲食記錄 🍽️</div>';
       }
       html += '</div>'; // /chart-card (各餐別)
 
@@ -396,13 +412,25 @@
         if (app) app.classList.add('ready');
       });
 
-      var btns = document.querySelectorAll('.seg button');
-      for (var i = 0; i < btns.length; i++) {
-        btns[i].addEventListener('click', function (e) {
+      // 區間切換 (重新向後端取資料)
+      var rangeBtns = document.querySelectorAll('.seg button[data-range]');
+      for (var i = 0; i < rangeBtns.length; i++) {
+        rangeBtns[i].addEventListener('click', function (e) {
           var r = Number(e.currentTarget.getAttribute('data-range'));
           if (r === state.range) return;
           state.range = r;
           load();
+        });
+      }
+
+      // 各餐別日期 tab (純前端切換, 資料已在 data.mealDays 內, 不需重新取)
+      var dayBtns = document.querySelectorAll('.seg button[data-mealday]');
+      for (var j = 0; j < dayBtns.length; j++) {
+        dayBtns[j].addEventListener('click', function (e) {
+          var d = Number(e.currentTarget.getAttribute('data-mealday'));
+          if (d === state.mealDay) return;
+          state.mealDay = d;
+          view(state.data);
         });
       }
     }
@@ -417,6 +445,7 @@
         })
         .then(function (body) {
           if (!body.success) throw new Error(body.error || '載入失敗');
+          state.data = body.data;
           view(body.data);
         })
         .catch(function (err) {

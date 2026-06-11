@@ -455,23 +455,28 @@ export async function getDailyTotals(
 }
 
 /**
- * 取得日期區間 [fromDate, toDate] 內,各餐別的攝取總熱量。
- * 只回有記錄的餐別;缺的餐別由 domain (buildDashboard) 補 0。
+ * 取得日期區間 [fromDate, toDate] 內,「每一天 × 每餐別」的攝取總熱量。
+ * 回 Map<date, Map<meal, total>>;只含有記錄的日期/餐別,缺的由 domain 補 0。
  */
-export async function getMealTotals(
+export async function getMealTotalsByDay(
   env: Env,
   userId: string,
   fromDate: string,
   toDate: string,
-): Promise<Map<Meal, number>> {
-  const map = new Map<Meal, number>();
+): Promise<Map<string, Map<Meal, number>>> {
+  const map = new Map<string, Map<Meal, number>>();
   const res = await env.DB.prepare(
-    'SELECT meal, SUM(calories) AS total FROM food_logs WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY meal',
+    'SELECT date, meal, SUM(calories) AS total FROM food_logs WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY date, meal',
   )
     .bind(userId, fromDate, toDate)
-    .all<{ meal: Meal; total: number }>();
+    .all<{ date: string; meal: Meal; total: number }>();
   for (const r of res.results ?? []) {
-    map.set(r.meal, Number(r.total));
+    let day = map.get(r.date);
+    if (!day) {
+      day = new Map<Meal, number>();
+      map.set(r.date, day);
+    }
+    day.set(r.meal, Number(r.total));
   }
   return map;
 }
