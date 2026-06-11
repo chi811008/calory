@@ -156,8 +156,6 @@ export async function handleToday(env: Env, user: User, replyToken: string): Pro
         const name = r.label ? `${MEAL_LABELS[r.meal]}・${r.label}` : MEAL_LABELS[r.meal];
         return `${i + 1}. ${name} ${r.calories} 卡`;
       }),
-      '',
-      '改：改 2 500　刪：刪 3',
     ];
     messages.push({ type: 'text', text: lines.join('\n') });
   }
