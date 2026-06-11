@@ -17,14 +17,15 @@ export function cumulativeNetDeficit(
 
 export interface WeightProgress {
   kg: number; // 體重變化:正=減重,負=增重
+  withinKcal: number; // 進入「當前這一公斤」已累積幾卡 (0..7699),供進度條填滿比例
   remainingKcal: number; // 距離「下一公斤」還差幾卡 (僅減重方向有意義)
 }
 
-/** 把累積淨赤字換算成公斤與距離下一公斤的剩餘卡數。 */
+/** 把累積淨赤字換算成公斤、當前公斤已走的卡數,與距離下一公斤的剩餘卡數。 */
 export function weightProgress(netDeficit: number): WeightProgress {
   const kg = netDeficit / KCAL_PER_KG;
   // 取「進入當前這一公斤」已累積多少 (0..7699),反推還差多少到下一公斤。
   const within = ((netDeficit % KCAL_PER_KG) + KCAL_PER_KG) % KCAL_PER_KG;
   const remainingKcal = within === 0 ? 0 : KCAL_PER_KG - within;
-  return { kg, remainingKcal };
+  return { kg, withinKcal: within, remainingKcal };
 }

@@ -342,17 +342,21 @@ describe('weight — 累積赤字換算公斤', () => {
     expect(cumulativeNetDeficit(1800, 3, 4000, 200)).toBe(1600);
   });
 
-  it('恰好 7700 卡 → 減 1 公斤,且剛好踩線時不再倒數', () => {
-    // WHY: 7700 卡 ≈ 1 公斤是整個進度條的換算基準,踩線那一刻 remaining 應為 0 而非 7700。
+  it('恰好 7700 卡 → 減 1 公斤,踩線那刻歸零進入下一公斤', () => {
+    // WHY: 7700 卡 ≈ 1 公斤是進度條換算基準。踩線時 remaining/within 都應歸 0,
+    //      進度條才會從滿格重置成下一公斤的 0%,而非卡在 100% 或顯示倒數 7700。
     const p = weightProgress(KCAL_PER_KG);
     expect(p.kg).toBe(1);
+    expect(p.withinKcal).toBe(0);
     expect(p.remainingKcal).toBe(0);
   });
 
-  it('進度繞圈:跨過一公斤後重新倒數到下一公斤', () => {
-    // WHY: 終點線是「下一公斤」,1.5 公斤的人應顯示還差半公斤 (3850 卡),不是從零重算。
+  it('進度繞圈:跨過一公斤後 within/remaining 對應到下一公斤的填滿與倒數', () => {
+    // WHY: 終點線是「下一公斤」,1.5 公斤的人進度條應填一半 (within 3850),
+    //      還差半公斤 (remaining 3850),不是從零重算也不是滿格。
     const p = weightProgress(KCAL_PER_KG + 3850); // 1.5 kg
     expect(p.kg).toBeCloseTo(1.5, 5);
+    expect(p.withinKcal).toBe(3850);
     expect(p.remainingKcal).toBe(3850);
   });
 

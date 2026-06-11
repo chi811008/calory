@@ -1,6 +1,6 @@
 import type { DayResult } from '../domain/calories';
 import { dailyPraise, nearMissLine, overAchieveLine } from '../domain/praise';
-import { weightProgress } from '../domain/weight';
+import { weightProgress, KCAL_PER_KG } from '../domain/weight';
 
 // 即時回饋卡 (Flex Message)。遊戲化的核心視覺:大數字 + 進度條 + 連續天數。
 
@@ -9,6 +9,7 @@ const COLOR = {
   near: '#F59E0B', // 琥珀:還沒達標但有赤字
   over: '#DC2626', // 紅:吃超標
   track: '#E5E7EB', // 進度條底色
+  weight: '#7C3AED', // 靛紫:累進公斤進度條 (與每日綠色區隔)
   sub: '#6B7280', // 次要文字
   text: '#111827',
 } as const;
@@ -39,13 +40,44 @@ function row(label: string, value: string) {
   };
 }
 
+/** 水平進度條。pct 為 0..100 的填滿百分比 (呼叫端自行夾在範圍內)。 */
+function progressBar(pct: number, color: string) {
+  return {
+    type: 'box',
+    layout: 'horizontal',
+    height: '14px',
+    backgroundColor: COLOR.track,
+    cornerRadius: '7px',
+    contents: [
+      ...(pct > 0
+        ? [
+            {
+              type: 'box',
+              layout: 'vertical',
+              width: `${pct}%`,
+              backgroundColor: color,
+              cornerRadius: '7px',
+              contents: [{ type: 'filler' }],
+            },
+          ]
+        : []),
+      { type: 'filler' },
+    ],
+  };
+}
+
 export function feedbackFlex(d: FeedbackData): object {
   const { result } = d;
-  const pct = Math.round(result.progress * 100);
 
   const settled = d.settled ?? true;
   // 還可以吃多少仍能達標 (負值 = 已吃超出達標額度)。進行中的核心數字。
   const budget = result.deficit - d.targetDeficit;
+
+  // 今日可吃額度 = 支出 (基礎＋運動) − 目標赤字。運動越多額度越大,長條反而退一點讓你多吃。
+  // 長條代表「已吃 ÷ 可吃額度」:滿格 = 吃到上限,再吃就超標。
+  const allowance = result.expenditure - d.targetDeficit;
+  const eatenPct =
+    allowance > 0 ? Math.round(Math.min(d.intake / allowance, 1) * 100) : d.intake > 0 ? 100 : 0;
 
   let statusText: string;
   let statusColor: string;
@@ -87,29 +119,6 @@ export function feedbackFlex(d: FeedbackData): object {
     if (near) flair.push(near);
   }
 
-  const bar = {
-    type: 'box',
-    layout: 'horizontal',
-    height: '14px',
-    backgroundColor: COLOR.track,
-    cornerRadius: '7px',
-    contents: [
-      ...(pct > 0
-        ? [
-            {
-              type: 'box',
-              layout: 'vertical',
-              width: `${pct}%`,
-              backgroundColor: barColor,
-              cornerRadius: '7px',
-              contents: [{ type: 'filler' }],
-            },
-          ]
-        : []),
-      { type: 'filler' },
-    ],
-  };
-
   const detailRows: object[] = [
     row('攝取', `${d.intake} 卡`),
     row('支出', `${result.expenditure} 卡 (基礎 ${d.tdee}＋運動 ${d.exerciseBurn})`),
@@ -130,7 +139,14 @@ export function feedbackFlex(d: FeedbackData): object {
   const bodyContents: object[] = [
     { type: 'text', text: d.headline, size: 'sm', color: COLOR.sub },
     { type: 'text', text: statusText, weight: 'bold', size: 'xl', color: statusColor, wrap: true },
-    bar,
+    progressBar(eatenPct, barColor),
+    {
+      type: 'text',
+      text: `已吃 ${d.intake} / 可吃 ${Math.max(allowance, 0)} 卡`,
+      size: 'xs',
+      color: COLOR.sub,
+      align: 'end',
+    },
     {
       type: 'box',
       layout: 'vertical',
@@ -140,16 +156,22 @@ export function feedbackFlex(d: FeedbackData): object {
     },
   ];
 
+  // 累進公斤進度條:本公斤已走的卡數 ÷ 7700。只在減重方向 (kg>0) 顯示,避免增重時誤導。
   if (progress && progress.kg > 0) {
-    bodyContents.push({
-      type: 'text',
-      text: `🎯 再 ${progress.remainingKcal} 卡達成下一公斤`,
-      size: 'sm',
-      color: COLOR.met,
-      align: 'center',
-      wrap: true,
-      margin: 'md',
-    });
+    const kgPct = Math.round((progress.withinKcal / KCAL_PER_KG) * 100);
+    bodyContents.push(
+      { type: 'text', text: '距離下一公斤', size: 'sm', color: COLOR.sub, margin: 'lg' },
+      progressBar(kgPct, COLOR.weight),
+      {
+        type: 'text',
+        text: `🎯 再 ${progress.remainingKcal} 卡達成下一公斤`,
+        size: 'sm',
+        color: COLOR.weight,
+        align: 'center',
+        wrap: true,
+        margin: 'sm',
+      },
+    );
   }
 
   for (const line of flair) {
