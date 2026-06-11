@@ -4,7 +4,7 @@ import type { PhotoEstimate } from '../domain/photo';
 
 /** 估算結果 + 選餐別的 Quick Reply。 */
 export function photoEstimateMessage(estimate: PhotoEstimate): object {
-  const labels = ['早餐', '午餐', '晚餐', '點心', '取消'];
+  const labels = ['早餐', '午餐', '晚餐', '點心', '飲料', '取消'];
   return {
     type: 'text',
     text: `📷 看起來是「${estimate.label}」，估計約 ${estimate.calories} 卡。\n要記到哪一餐？`,

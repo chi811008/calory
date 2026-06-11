@@ -12,13 +12,14 @@ export interface Env {
 }
 
 export type Sex = 'male' | 'female';
-export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'drink';
 
 export const MEAL_LABELS: Record<Meal, string> = {
   breakfast: '早餐',
   lunch: '午餐',
   dinner: '晚餐',
   snack: '點心',
+  drink: '飲料',
 };
 
 export interface User {

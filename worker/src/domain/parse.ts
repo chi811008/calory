@@ -49,6 +49,7 @@ const MEAL_KEYWORDS: { re: RegExp; meal: Meal }[] = [
   { re: /^(午餐|中餐|午)/, meal: 'lunch' },
   { re: /^(晚餐|晚)/, meal: 'dinner' },
   { re: /^(點心|宵夜|零食|下午茶)/, meal: 'snack' },
+  { re: /^(飲料|飲品|手搖杯|手搖)/, meal: 'drink' },
 ];
 
 const EXERCISE_RE = /^(運動|跑步|健走|快走|走路|游泳|騎車|單車|重訓|健身|有氧|跳繩)/;

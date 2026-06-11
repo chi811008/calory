@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS food_logs (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    TEXT    NOT NULL,
   date       TEXT    NOT NULL,            -- YYYY-MM-DD (使用者當地時區)
-  meal       TEXT    NOT NULL,            -- breakfast|lunch|dinner|snack
+  meal       TEXT    NOT NULL,            -- breakfast|lunch|dinner|snack|drink
   label      TEXT,
   calories   INTEGER NOT NULL,
   source     TEXT    NOT NULL DEFAULT 'manual', -- manual|photo|preset

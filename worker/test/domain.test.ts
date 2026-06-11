@@ -182,6 +182,18 @@ describe('parseMessage — 單筆記錄', () => {
     });
   });
 
+  it('飲料自成一類餐別,與點心分開', () => {
+    // WHY: 飲料 (手搖/拿鐵) 不該被歸進「點心」;打「飲料 …」要記成獨立的 drink 餐別。
+    expect(parseMessage('飲料 拿鐵 130')).toEqual({
+      kind: 'log',
+      items: [{ type: 'food', meal: 'drink', calories: 130, label: '拿鐵' }],
+    });
+    expect(parseMessage('點心 餅乾 100')).toEqual({
+      kind: 'log',
+      items: [{ type: 'food', meal: 'snack', calories: 100, label: '餅乾' }],
+    });
+  });
+
   it('解析運動消耗', () => {
     expect(parseMessage('運動 300')).toEqual({
       kind: 'log',
