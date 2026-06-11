@@ -145,6 +145,8 @@
     }
     .msg.error { color: var(--over); }
     .empty-note { text-align: center; color: var(--sub); font-size: 0.82rem; padding: 28px 0; }
+    .goal-meta { text-align: center; margin-top: 10px; font-size: 0.95rem; color: var(--text); }
+    .goal-meta b { font-size: 1.5rem; font-weight: 800; color: #E11D48; letter-spacing: -0.02em; }
   </style>
 </head>
 <body>
@@ -157,7 +159,7 @@
     'use strict';
 
     var LIFF_ID = '__LIFF_ID__';
-    var COLOR = { met: '#16A34A', near: '#F59E0B', over: '#DC2626', track: '#E5E7EB', sub: '#6B7280' };
+    var COLOR = { met: '#16A34A', near: '#F59E0B', over: '#DC2626', track: '#E5E7EB', sub: '#6B7280', heart: '#E11D48' };
     // 各餐別色盤 (對齊 MEAL_LABELS 順序)
     var MEAL_COLOR = {
       breakfast: '#F59E0B', lunch: '#16A34A', dinner: '#6366F1',
@@ -222,7 +224,9 @@
           parts.push('<circle cx="' + cx.toFixed(1) + '" cy="' + zeroY.toFixed(1) +
             '" r="1.6" fill="' + COLOR.track + '"/>');
         }
-        if (i % labelEvery === 0 || i === n - 1) {
+        // 由末端 (今天) 往回每 labelEvery 標一個, 確保間距 ≥ labelEvery、末日必標,
+        // 不會出現「倒數第二日」與「今天」兩個大字擠在一起。
+        if ((n - 1 - i) % labelEvery === 0) {
           parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (H - 14) +
             '" text-anchor="middle">' + fmtDay(p.date) + '</text>');
         }
@@ -277,6 +281,39 @@
         'aria-label="各餐別攝取熱量長條圖">' + parts.join('') + '</svg>';
     }
 
+    // 減重目標愛心:每顆 = 1 公斤, 依 fill 比例 (0..1) 由下往上填滿。
+    var HEART_PATH = 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3' +
+      'c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5' +
+      'c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
+
+    function renderGoalHearts(goal) {
+      var fills = goal.hearts;
+      var n = fills.length;
+      var W = 480;
+      var slot = W / n;
+      var size = Math.min(slot * 0.82, 96);
+      var H = size + 16;
+      var sc = size / 24;
+      var defs = [], parts = [];
+      for (var i = 0; i < n; i++) {
+        var f = Math.max(0, Math.min(1, fills[i]));
+        var x = slot * i + (slot - size) / 2;
+        var clipId = 'hc' + i;
+        // clip 矩形由下往上:填滿 f 比例 → 高度 24f, 從 y=24(1-f) 起。
+        defs.push('<clipPath id="' + clipId + '"><rect x="0" y="' + (24 * (1 - f)).toFixed(2) +
+          '" width="24" height="' + (24 * f).toFixed(2) + '"/></clipPath>');
+        parts.push('<g transform="translate(' + x.toFixed(1) + ',8) scale(' + sc.toFixed(3) + ')">' +
+          '<path d="' + HEART_PATH + '" fill="' + COLOR.track + '"/>' +
+          '<path d="' + HEART_PATH + '" fill="' + COLOR.heart + '" clip-path="url(#' + clipId + ')"/>' +
+          '<path d="' + HEART_PATH + '" fill="none" stroke="' + COLOR.heart +
+          '" stroke-width="1.2" opacity="0.55"/>' +
+          '</g>');
+      }
+      return '<svg viewBox="0 0 ' + W + ' ' + H.toFixed(1) + '" role="img" ' +
+        'aria-label="減重目標愛心進度">' + '<defs>' + defs.join('') + '</defs>' +
+        parts.join('') + '</svg>';
+    }
+
     function view(data) {
       var s = data.series;
       var hasData = s.some(function (p) { return p.logged; });
@@ -288,6 +325,23 @@
         (streakZero ? '0' : '🔥 ' + data.streak) + '</span><span class="unit">' +
         (streakZero ? '尚未開始連續達標' : '天連續達標') + '</span></div>';
       html += '<div class="badge">' + (data.badge || '') + '</div>';
+
+      // 減重目標愛心卡 (全程累積, 不隨區間變)
+      if (data.goal) {
+        var g = data.goal;
+        var lost = g.lostKg;
+        var metaText = lost >= 0
+          ? '已減 <b>' + lost.toFixed(2) + '</b> / ' + g.goalKg + ' 公斤'
+          : '目前淨增 <b>' + Math.abs(lost).toFixed(2) + '</b> 公斤';
+        html += '<div class="chart-card" style="margin-bottom:18px">' +
+          '<div class="chart-head"><h2>減重目標</h2>' +
+          '<span class="hint">' + (g.achieved ? '已達成 🎉' : '全程累積') + '</span></div>' +
+          '<div class="chart-wrap">' + renderGoalHearts(g) + '</div>' +
+          '<div class="goal-meta">' + metaText + '</div></div>';
+      } else {
+        html += '<div class="chart-card" style="margin-bottom:18px">' +
+          '<div class="empty-note">想看減重目標進度?<br>在 LINE 打「目標 4 公斤」設定 🎯</div></div>';
+      }
 
       // week stats
       var w = data.week;

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   bedtime_hour    INTEGER NOT NULL DEFAULT 23,
   tz              TEXT    NOT NULL DEFAULT 'Asia/Taipei',
   onboarded       INTEGER NOT NULL DEFAULT 0,
+  goal_kg         INTEGER NOT NULL DEFAULT 0,  -- 減重目標公斤數 (0 = 未設定); 愛心進度條用
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 

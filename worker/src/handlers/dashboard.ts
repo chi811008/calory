@@ -1,8 +1,9 @@
 import type { Env } from '../types';
 import { verifyIdToken } from '../line/verify';
-import { ensureUser, getDailyTotals, getMealTotals } from '../db/repo';
+import { ensureUser, getDailyTotals, getMealTotals, getCumulativeStats } from '../db/repo';
 import { localDate, addDays } from '../domain/date';
 import { buildDashboard } from '../domain/dashboard';
+import { cumulativeNetDeficit } from '../domain/weight';
 
 // LIFF 儀表板資料 API。前端帶 LINE id_token (Authorization: Bearer ...) 來,
 // 後端驗證換出 userId 後才查資料,確保資料隔離。
@@ -36,6 +37,15 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
     // 餐別圖只看今天:顯示今日各餐別各吃了多少卡。
     const mealTotals = await getMealTotals(env, userId, today, today);
 
+    // 減重目標愛心:用全程累積淨赤字 (與每日卡的「累積淨赤字」同一套帳), 不隨區間變。
+    const cum = await getCumulativeStats(env, userId);
+    const cumulativeDeficit = cumulativeNetDeficit(
+      user.tdee,
+      cum.daysLogged,
+      cum.totalIntake,
+      cum.totalBurn,
+    );
+
     const dates: string[] = [];
     for (let i = WINDOW_DAYS - 1; i >= 0; i--) dates.push(addDays(today, -i));
 
@@ -46,6 +56,8 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
       user.targetDeficit,
       rangeDays,
       mealTotals,
+      user.goalKg,
+      cumulativeDeficit,
     );
     return json({ success: true, data: dashboard });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { computeDay } from './calories';
 import { summarizeWeek, type WeekSummary } from './weekly';
 import { currentStreak, streakBadge, type DayMet } from './streak';
+import { KCAL_PER_KG, heartFills } from './weight';
 import type { DayTotals } from '../db/repo';
 import { MEAL_LABELS, type Meal } from '../types';
 
@@ -27,11 +28,19 @@ export interface MealBar {
   calories: number;
 }
 
+export interface GoalProgress {
+  goalKg: number; // 目標減重公斤數
+  lostKg: number; // 全程累積已減公斤 (可負:淨增重)
+  hearts: number[]; // 長度 = goalKg, 每顆愛心填滿比例 0..1
+  achieved: boolean; // 是否已達成 (lostKg >= goalKg)
+}
+
 export interface Dashboard {
   tdee: number;
   target: number; // 目標赤字
   series: DashboardPoint[]; // 升冪, 長度 = rangeDays, 未記錄日以 0 補
   meals: MealBar[]; // 今日各餐別攝取, 固定 5 類順序, 缺的補 0
+  goal: GoalProgress | null; // 減重目標愛心進度 (全程累積); 未設定目標則為 null
   week: WeekSummary; // 最近 7 天 (僅計有記錄日)
   streak: number;
   badge: string | null;
@@ -54,6 +63,8 @@ export function buildDashboard(
   targetDeficit: number,
   rangeDays: number,
   mealTotals: Map<Meal, number>,
+  goalKg = 0, // 0 = 未設定減重目標
+  cumulativeDeficit = 0, // 全程累積淨赤字 (跨所有日期), 換算愛心進度用
 ): Dashboard {
   const allPoints: DashboardPoint[] = dates.map((date) => {
     const t = totals.get(date);
@@ -85,11 +96,19 @@ export function buildDashboard(
     calories: mealTotals.get(meal) ?? 0,
   }));
 
+  // 減重目標愛心:全程累積淨赤字 ÷ 7700 = 已減公斤, 分配到 goalKg 顆愛心。
+  const lostKg = cumulativeDeficit / KCAL_PER_KG;
+  const goal: GoalProgress | null =
+    goalKg > 0
+      ? { goalKg, lostKg, hearts: heartFills(lostKg, goalKg), achieved: lostKg >= goalKg }
+      : null;
+
   return {
     tdee,
     target: targetDeficit,
     series: allPoints.slice(-rangeDays),
     meals,
+    goal,
     week,
     streak,
     badge: streakBadge(streak),

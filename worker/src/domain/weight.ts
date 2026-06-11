@@ -29,3 +29,17 @@ export function weightProgress(netDeficit: number): WeightProgress {
   const remainingKcal = within === 0 ? 0 : KCAL_PER_KG - within;
   return { kg, withinKcal: within, remainingKcal };
 }
+
+/**
+ * 把「已減公斤數」分配成 goalKg 顆愛心的填滿比例 (各 0..1)。
+ * 第 i 顆 (0-indexed) 填滿比例 = clamp(lostKg − i, 0, 1):
+ * 愛心一顆一顆依序填滿;吃超標使 lostKg 下降時,對應愛心比例自動退回。
+ * lostKg ≤ 0 (尚無進度或淨增重) → 全部 0。
+ */
+export function heartFills(lostKg: number, goalKg: number): number[] {
+  const fills: number[] = [];
+  for (let i = 0; i < goalKg; i++) {
+    fills.push(Math.max(0, Math.min(1, lostKg - i)));
+  }
+  return fills;
+}

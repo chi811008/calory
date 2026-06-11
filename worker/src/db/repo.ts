@@ -19,8 +19,16 @@ function rowToUser(r: Row): User {
     bedtimeHour: Number(r.bedtime_hour),
     tz: String(r.tz),
     onboarded: Number(r.onboarded) === 1,
+    goalKg: Number(r.goal_kg),
     createdAt: String(r.created_at),
   };
+}
+
+/** 設定/更新減重目標公斤數 (0 = 取消目標)。 */
+export async function setGoalKg(env: Env, userId: string, goalKg: number): Promise<void> {
+  await env.DB.prepare('UPDATE users SET goal_kg = ? WHERE line_user_id = ?')
+    .bind(goalKg, userId)
+    .run();
 }
 
 export async function getUser(env: Env, userId: string): Promise<User | null> {

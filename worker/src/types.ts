@@ -34,5 +34,6 @@ export interface User {
   bedtimeHour: number;
   tz: string;
   onboarded: boolean;
+  goalKg: number; // 減重目標公斤數 (0 = 未設定)
   createdAt: string;
 }

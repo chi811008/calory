@@ -137,4 +137,31 @@ describe('buildDashboard', () => {
     expect(d.meals).toHaveLength(5);
     expect(d.meals.every((m) => m.calories === 0)).toBe(true);
   });
+
+  it('goal: 未設定目標 (goalKg=0) → goal 為 null', () => {
+    const dates = rangeDates('2026-06-02', 30);
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS, 0, 12000);
+    expect(d.goal).toBeNull();
+  });
+
+  it('goal: 4 公斤目標 + 累積 1.5 公斤赤字 → 愛心依序填滿、未達成', () => {
+    const dates = rangeDates('2026-06-02', 30);
+    // 1.5 公斤 = 7700 × 1.5 = 11550 卡
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS, 4, 11550);
+    expect(d.goal).not.toBeNull();
+    expect(d.goal!.goalKg).toBe(4);
+    expect(d.goal!.lostKg).toBeCloseTo(1.5, 5);
+    expect(d.goal!.hearts).toHaveLength(4);
+    expect(d.goal!.hearts[0]).toBeCloseTo(1, 5);
+    expect(d.goal!.hearts[1]).toBeCloseTo(0.5, 5);
+    expect(d.goal!.hearts[2]).toBe(0);
+    expect(d.goal!.achieved).toBe(false);
+  });
+
+  it('goal: 累積赤字 ≥ 目標公斤 → achieved 為 true 且愛心全滿', () => {
+    const dates = rangeDates('2026-06-02', 30);
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS, 2, 7700 * 2.3);
+    expect(d.goal!.achieved).toBe(true);
+    expect(d.goal!.hearts).toEqual([1, 1]);
+  });
 });

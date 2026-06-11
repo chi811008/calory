@@ -5,7 +5,7 @@ import { currentStreak, streakBadge } from '../src/domain/streak';
 import { parseMessage } from '../src/domain/parse';
 import { dailyPraise, nearMissLine, overAchieveLine, NEAR_MISS_KCAL } from '../src/domain/praise';
 import { isDaySettled } from '../src/domain/schedule';
-import { cumulativeNetDeficit, weightProgress, KCAL_PER_KG } from '../src/domain/weight';
+import { cumulativeNetDeficit, weightProgress, heartFills, KCAL_PER_KG } from '../src/domain/weight';
 
 describe('tdee', () => {
   it('用 Mifflin-St Jeor 算男性 BMR', () => {
@@ -319,6 +319,18 @@ describe('parseMessage — 控制指令', () => {
     expect(parseMessage('刪運動 3')).toEqual({ kind: 'deleteExercise', index: 3 });
   });
 
+  it('目標 N 公斤 → setGoal (容許有無「公斤」/空白與小數四捨五入)', () => {
+    // WHY: 使用者打法多變;統一收斂成整數公斤目標,愛心才一顆對一公斤。
+    expect(parseMessage('目標 4 公斤')).toEqual({ kind: 'setGoal', goalKg: 4 });
+    expect(parseMessage('目標4')).toEqual({ kind: 'setGoal', goalKg: 4 });
+    expect(parseMessage('目標 3 kg')).toEqual({ kind: 'setGoal', goalKg: 3 });
+    expect(parseMessage('目標 3.6 公斤')).toEqual({ kind: 'setGoal', goalKg: 4 });
+  });
+
+  it('單獨「目標」 → showGoal (查詢目前目標)', () => {
+    expect(parseMessage('目標')).toEqual({ kind: 'showGoal' });
+  });
+
   it('運動指令不可被「運動 N 記錄」或「改/刪 N」誤判 (順序)', () => {
     // WHY: 「運動清單」開頭是運動關鍵字,須在控制指令層先判,否則落入記錄批次;
     //      「改運動/刪運動」也須早於 editFood/deleteFood,免得被當成食物序號。
@@ -385,5 +397,29 @@ describe('weight — 累積赤字換算公斤', () => {
     const p = weightProgress(0);
     expect(p.kg).toBe(0);
     expect(p.remainingKcal).toBe(0);
+  });
+});
+
+describe('heartFills — 減重目標愛心填滿比例', () => {
+  it('每顆愛心依序填滿:1.3 公斤 = 第一顆滿、第二顆 30%、其餘 0', () => {
+    // WHY: 愛心要一顆一顆滿,而非每顆都填同比例;這樣「完成 N 公斤 = N 顆滿」才成立。
+    const f = heartFills(1.3, 4);
+    expect(f).toHaveLength(4);
+    expect(f[0]).toBeCloseTo(1, 5);
+    expect(f[1]).toBeCloseTo(0.3, 5);
+    expect(f[2]).toBe(0);
+    expect(f[3]).toBe(0);
+  });
+
+  it('達成目標:已減 ≥ goalKg → 全部填滿', () => {
+    expect(heartFills(4, 4)).toEqual([1, 1, 1, 1]);
+    // 超過目標也不溢出 (每顆上限 1)
+    expect(heartFills(5.5, 4)).toEqual([1, 1, 1, 1]);
+  });
+
+  it('吃超標導致淨增重 (lostKg ≤ 0) → 全部 0,不會出現負填滿', () => {
+    // WHY: 超額時累積赤字下降,愛心比例必須能退回;負值也夾到 0,SVG 才不會畫破。
+    expect(heartFills(-0.8, 4)).toEqual([0, 0, 0, 0]);
+    expect(heartFills(0, 4)).toEqual([0, 0, 0, 0]);
   });
 });
