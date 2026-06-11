@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildDashboard } from '../src/domain/dashboard';
 import type { DayTotals } from '../src/db/repo';
+import type { Meal } from '../src/types';
+
+const NO_MEALS = new Map<Meal, number>();
 
 // 建一段升冪日期 (endDate 往回 n 天, 含 endDate), 最後一天為「今日」。
 function rangeDates(endDate: string, n: number): string[] {
@@ -21,7 +24,7 @@ describe('buildDashboard', () => {
     const totals = new Map<string, DayTotals>();
     totals.set('2026-06-01', { intake: 1200, burn: 100 }); // 昨日有記錄
 
-    const d = buildDashboard(dates, totals, TDEE, TARGET, 14);
+    const d = buildDashboard(dates, totals, TDEE, TARGET, 14, NO_MEALS);
 
     // 圖表只回傳要求的區間長度 (14)
     expect(d.series).toHaveLength(14);
@@ -45,7 +48,7 @@ describe('buildDashboard', () => {
       totals.set(dt, { intake: 1000, burn: 0 }); // deficit 800, 達標
     }
 
-    const d7 = buildDashboard(dates, totals, TDEE, TARGET, 7);
+    const d7 = buildDashboard(dates, totals, TDEE, TARGET, 7, NO_MEALS);
     expect(d7.series).toHaveLength(7);
     // 即使圖表只看 7 天, streak 仍正確算出 5 (跨越 7 天視窗外亦可, 此處剛好 5)
     expect(d7.streak).toBe(5);
@@ -60,7 +63,7 @@ describe('buildDashboard', () => {
     // 今日只吃了一點, 還沒達標 (deficit 小)
     totals.set('2026-06-02', { intake: 1700, burn: 0 }); // deficit 100 < 400
 
-    const d = buildDashboard(dates, totals, TDEE, TARGET, 14);
+    const d = buildDashboard(dates, totals, TDEE, TARGET, 14, NO_MEALS);
     // 今日未達標, 但因進行中不歸零 → 維持昨天為止的 2
     expect(d.streak).toBe(2);
     expect(d.series[d.series.length - 1].met).toBe(false);
@@ -73,7 +76,7 @@ describe('buildDashboard', () => {
     totals.set('2026-06-01', { intake: 1000, burn: 0 });
     totals.set('2026-06-02', { intake: 1000, burn: 0 }); // 今日也達標
 
-    const d = buildDashboard(dates, totals, TDEE, TARGET, 14);
+    const d = buildDashboard(dates, totals, TDEE, TARGET, 14, NO_MEALS);
     expect(d.streak).toBe(3);
   });
 
@@ -87,18 +90,51 @@ describe('buildDashboard', () => {
     // 7 天視窗外的記錄不該算進 week
     totals.set('2026-05-20', { intake: 1000, burn: 0 });
 
-    const d = buildDashboard(dates, totals, TDEE, TARGET, 14);
+    const d = buildDashboard(dates, totals, TDEE, TARGET, 14, NO_MEALS);
     expect(d.week.daysLogged).toBe(3);
     expect(d.week.daysMet).toBe(2);
   });
 
   it('回傳 target/tdee 供前端畫目標線與標示', () => {
     const dates = rangeDates('2026-06-02', 30);
-    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14);
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS);
     expect(d.target).toBe(TARGET);
     expect(d.tdee).toBe(TDEE);
     // 全無記錄 → streak 0, badge null
     expect(d.streak).toBe(0);
     expect(d.badge).toBeNull();
+  });
+
+  it('meals: 固定 5 類順序與標籤, 缺的餐別補 0', () => {
+    const dates = rangeDates('2026-06-02', 30);
+    const mealTotals = new Map<Meal, number>([
+      ['breakfast', 300],
+      ['dinner', 700],
+      ['drink', 150],
+    ]);
+
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, mealTotals);
+
+    // 固定順序: 早餐/午餐/晚餐/點心/飲料
+    expect(d.meals.map((m) => m.meal)).toEqual([
+      'breakfast',
+      'lunch',
+      'dinner',
+      'snack',
+      'drink',
+    ]);
+    expect(d.meals.map((m) => m.label)).toEqual(['早餐', '午餐', '晚餐', '點心', '飲料']);
+    // 有記錄的餐別帶入數值, 缺的補 0
+    expect(d.meals.map((m) => m.calories)).toEqual([300, 0, 700, 0, 150]);
+    // 加總與輸入一致
+    const sum = d.meals.reduce((acc, m) => acc + m.calories, 0);
+    expect(sum).toBe(1150);
+  });
+
+  it('meals: 空資料時 5 類皆 0', () => {
+    const dates = rangeDates('2026-06-02', 30);
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS);
+    expect(d.meals).toHaveLength(5);
+    expect(d.meals.every((m) => m.calories === 0)).toBe(true);
   });
 });

@@ -2,6 +2,10 @@ import { computeDay } from './calories';
 import { summarizeWeek, type WeekSummary } from './weekly';
 import { currentStreak, streakBadge, type DayMet } from './streak';
 import type { DayTotals } from '../db/repo';
+import { MEAL_LABELS, type Meal } from '../types';
+
+// 各餐別圖固定排列順序 (與 MEAL_LABELS 一致), 缺的餐別補 0 方便比較。
+const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'];
 
 // LIFF 儀表板的資料聚合 —— 純函式。重用 computeDay / summarizeWeek / streak,
 // 確保圖表數字與即時回饋卡、週報完全一致。
@@ -17,10 +21,17 @@ export interface DashboardPoint {
   met: boolean; // 未記錄日一律 false (與 today.ts streak 邏輯一致, 空白日中斷連續)
 }
 
+export interface MealBar {
+  meal: Meal;
+  label: string;
+  calories: number;
+}
+
 export interface Dashboard {
   tdee: number;
   target: number; // 目標赤字
   series: DashboardPoint[]; // 升冪, 長度 = rangeDays, 未記錄日以 0 補
+  meals: MealBar[]; // 區間內各餐別總攝取, 固定 5 類順序, 缺的補 0
   week: WeekSummary; // 最近 7 天 (僅計有記錄日)
   streak: number;
   badge: string | null;
@@ -42,6 +53,7 @@ export function buildDashboard(
   tdee: number,
   targetDeficit: number,
   rangeDays: number,
+  mealTotals: Map<Meal, number>,
 ): Dashboard {
   const allPoints: DashboardPoint[] = dates.map((date) => {
     const t = totals.get(date);
@@ -66,10 +78,18 @@ export function buildDashboard(
     .filter((t): t is DayTotals => t !== undefined);
   const week = summarizeWeek(weekDays, tdee, targetDeficit);
 
+  // 各餐別:固定 5 類順序輸出, 缺的餐別補 0。
+  const meals: MealBar[] = MEAL_ORDER.map((meal) => ({
+    meal,
+    label: MEAL_LABELS[meal],
+    calories: mealTotals.get(meal) ?? 0,
+  }));
+
   return {
     tdee,
     target: targetDeficit,
     series: allPoints.slice(-rangeDays),
+    meals,
     week,
     streak,
     badge: streakBadge(streak),

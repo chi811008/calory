@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { verifyIdToken } from '../line/verify';
-import { ensureUser, getDailyTotals } from '../db/repo';
+import { ensureUser, getDailyTotals, getMealTotals } from '../db/repo';
 import { localDate, addDays } from '../domain/date';
 import { buildDashboard } from '../domain/dashboard';
 
@@ -33,10 +33,21 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
     const fromDate = addDays(today, -(WINDOW_DAYS - 1));
     const totals = await getDailyTotals(env, userId, fromDate, today);
 
+    // 餐別圖只看使用者選的區間 (7/14/30), 與每日赤字圖對齊。
+    const mealFrom = addDays(today, -(rangeDays - 1));
+    const mealTotals = await getMealTotals(env, userId, mealFrom, today);
+
     const dates: string[] = [];
     for (let i = WINDOW_DAYS - 1; i >= 0; i--) dates.push(addDays(today, -i));
 
-    const dashboard = buildDashboard(dates, totals, user.tdee, user.targetDeficit, rangeDays);
+    const dashboard = buildDashboard(
+      dates,
+      totals,
+      user.tdee,
+      user.targetDeficit,
+      rangeDays,
+      mealTotals,
+    );
     return json({ success: true, data: dashboard });
   } catch (err) {
     console.error('dashboard api error', err);

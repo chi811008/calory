@@ -445,3 +445,25 @@ export async function getDailyTotals(
 
   return map;
 }
+
+/**
+ * 取得日期區間 [fromDate, toDate] 內,各餐別的攝取總熱量。
+ * 只回有記錄的餐別;缺的餐別由 domain (buildDashboard) 補 0。
+ */
+export async function getMealTotals(
+  env: Env,
+  userId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<Map<Meal, number>> {
+  const map = new Map<Meal, number>();
+  const res = await env.DB.prepare(
+    'SELECT meal, SUM(calories) AS total FROM food_logs WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY meal',
+  )
+    .bind(userId, fromDate, toDate)
+    .all<{ meal: Meal; total: number }>();
+  for (const r of res.results ?? []) {
+    map.set(r.meal, Number(r.total));
+  }
+  return map;
+}
