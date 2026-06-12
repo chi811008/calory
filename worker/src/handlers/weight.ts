@@ -1,5 +1,5 @@
 import type { Env, User } from '../types';
-import { insertWeight, getLatestWeight } from '../db/repo';
+import { insertWeight, getLatestWeight, deleteWeight } from '../db/repo';
 import { localDate } from '../domain/date';
 import { replyMessage } from '../line/client';
 
@@ -32,6 +32,36 @@ export async function handleSetWeight(
   const rounded = Math.round(weightKg * 10) / 10; // 保留一位小數
   await insertWeight(env, user.lineUserId, date, rounded);
   await text(env, replyToken, `⚖️ 已記錄今天體重:${rounded} 公斤${dashboardHint(env)}`);
+}
+
+/**
+ * 「體重 刪除 [M/D]」:刪除某日體重記錄 (省略日期 = 今天)。
+ * month/day 為 null 代表今天; 指定 M/D 時年份取今天的年, 若該日在未來 (例:現在 1 月刪 12/x)
+ * 則視為去年同日 —— 記錄都在過去。
+ */
+export async function handleDeleteWeight(
+  env: Env,
+  user: User,
+  month: number | null,
+  day: number | null,
+  replyToken: string,
+): Promise<void> {
+  const today = localDate(user.tz);
+  let date: string;
+  if (month === null || day === null) {
+    date = today;
+  } else {
+    const year = Number(today.slice(0, 4));
+    const mmdd = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    date = `${year}-${mmdd}`;
+    if (date > today) date = `${year - 1}-${mmdd}`; // 未來日 → 去年同日
+  }
+  const deleted = await deleteWeight(env, user.lineUserId, date);
+  if (!deleted) {
+    await text(env, replyToken, `${date} 沒有體重記錄可刪 🤔`);
+    return;
+  }
+  await text(env, replyToken, `🗑️ 已刪除 ${date} 的體重記錄${dashboardHint(env)}`);
 }
 
 /** 「體重」:查詢最近一次記錄的體重。 */

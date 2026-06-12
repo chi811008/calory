@@ -45,6 +45,7 @@ export type ParsedMessage =
   | { kind: 'showGoal' }
   | { kind: 'setWeight'; weightKg: number }
   | { kind: 'showWeight' }
+  | { kind: 'deleteWeight'; month: number | null; day: number | null } // null = 今天
   | { kind: 'log'; items: LogItem[] };
 
 const MEAL_KEYWORDS: { re: RegExp; meal: Meal }[] = [
@@ -75,6 +76,8 @@ const SHOW_GOAL_RE = /^目標$/;
 // 體重:「體重 70」「體重70.5」「體重 70 公斤/kg」皆可;單獨「體重」查最近一次。
 const SET_WEIGHT_RE = /^體重\s*(\d+(?:\.\d+)?)\s*(?:公斤|kg)?\s*$/i;
 const SHOW_WEIGHT_RE = /^體重$/;
+// 刪體重:「體重 刪除」刪今天、「體重 刪除 6/10」刪某天 (M/D, 與圖表日期格式一致);「刪」「刪除」皆可。
+const DELETE_WEIGHT_RE = /^體重\s*刪(?:除)?\s*(?:(\d{1,2})\/(\d{1,2}))?\s*$/;
 
 const NUMBER_RE = /-?\d+(\.\d+)?/;
 
@@ -227,6 +230,16 @@ export function parseMessage(raw: string): ParsedMessage {
     }
 
     if (SHOW_WEIGHT_RE.test(one)) return { kind: 'showWeight' };
+    const dw = one.match(DELETE_WEIGHT_RE);
+    if (dw) {
+      if (dw[1] === undefined) return { kind: 'deleteWeight', month: null, day: null };
+      const month = Number(dw[1]);
+      const day = Number(dw[2]);
+      // 月日範圍合理才視為刪除指令; 不合理就讓它落下去 (最終回 help)。
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return { kind: 'deleteWeight', month, day };
+      }
+    }
     const sw = one.match(SET_WEIGHT_RE);
     if (sw) {
       const weightKg = Number(sw[1]);

@@ -226,6 +226,14 @@ export async function insertWeight(
     .run();
 }
 
+/** 刪某日體重記錄。回傳是否真的刪到 (該日無記錄則 false)。 */
+export async function deleteWeight(env: Env, userId: string, date: string): Promise<boolean> {
+  const res = await env.DB.prepare('DELETE FROM weight_logs WHERE user_id = ? AND date = ?')
+    .bind(userId, date)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
 /** 取區間 [fromDate, toDate] 內的體重記錄, 依日期升冪 (一天一筆, 寫入端已去重)。 */
 export async function getWeightLogs(
   env: Env,

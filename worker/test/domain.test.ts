@@ -343,6 +343,21 @@ describe('parseMessage — 控制指令', () => {
     expect(parseMessage('體重')).toEqual({ kind: 'showWeight' });
   });
 
+  it('體重 刪除 [M/D] → deleteWeight (無日期=今天, 有日期帶 month/day)', () => {
+    // WHY: 刪除走 month/day 而非已解析的日期字串, 因為年份要在 handler 用使用者時區補,
+    // parser 維持純函式不碰時間。「刪」「刪除」皆可, 與食物/運動刪除指令一致。
+    expect(parseMessage('體重 刪除')).toEqual({ kind: 'deleteWeight', month: null, day: null });
+    expect(parseMessage('體重刪')).toEqual({ kind: 'deleteWeight', month: null, day: null });
+    expect(parseMessage('體重 刪除 6/10')).toEqual({ kind: 'deleteWeight', month: 6, day: 10 });
+  });
+
+  it('體重 刪除 月日超界 → 不視為刪除指令 (落到 help, 非 setWeight)', () => {
+    // WHY: 99/99 不是合法日期, 不能誤判成刪除; 也不該被當體重數字記錄。
+    expect(parseMessage('體重 刪除 99/99')).not.toEqual(
+      expect.objectContaining({ kind: 'deleteWeight' }),
+    );
+  });
+
   it('運動指令不可被「運動 N 記錄」或「改/刪 N」誤判 (順序)', () => {
     // WHY: 「運動清單」開頭是運動關鍵字,須在控制指令層先判,否則落入記錄批次;
     //      「改運動/刪運動」也須早於 editFood/deleteFood,免得被當成食物序號。
