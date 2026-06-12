@@ -129,6 +129,7 @@
     svg { width: 100%; height: auto; display: block; }
     .axis-label { fill: var(--sub); font-size: 18px; }
     .target-label { fill: var(--near); font-size: 18px; font-weight: 700; }
+    .date-label { fill: var(--sub); font-size: 14px; } /* 體重圖 x 軸日期:略小以容納最多 10 個 */
 
     .legend {
       display: flex;
@@ -258,23 +259,23 @@
         'aria-label="每日卡路里赤字長條圖">' + parts.join('') + '</svg>';
     }
 
-    // 體重變化折線圖。weights 稀疏 (只含有記錄日), x 依實際日期落在 series 的時間軸上,
-    // 與每日赤字圖對齊;y 依體重範圍自動縮放 (上下留白)。
-    function renderWeightChart(weights, series) {
+    // 體重變化折線圖。橫軸固定切 10 格 (類別軸, 不依實際日期間隔), 取最近最多 10 筆記錄,
+    // 由左往右逐格填:第 i 點放第 i 格中心, 點不足 10 個時右側留空 (不撐滿整軸)。
+    // 每點下方寫出日期。y 依體重範圍自動縮放 (上下留白)。
+    function renderWeightChart(weights) {
       var W = 480, H = 240;
-      var padL = 38, padR = 14, padTop = 26, padBottom = 44;
+      // padL 需容納縱軸數字 (18px, 靠右對齊畫在 padL-6); 太窄時 3 位數體重會超出左緣被裁掉。
+      var padL = 52, padR = 14, padTop = 26, padBottom = 44;
       var plotW = W - padL - padR;
       var plotH = H - padTop - padBottom;
 
-      var startMs = Date.parse(series[0].date + 'T00:00:00Z');
-      var endMs = Date.parse(series[series.length - 1].date + 'T00:00:00Z');
-      var spanMs = Math.max(1, endMs - startMs);
-      function x(iso) {
-        var t = Date.parse(iso + 'T00:00:00Z');
-        return padL + (series.length === 1 ? plotW / 2 : (t - startMs) / spanMs * plotW);
-      }
+      var SLOTS = 10;             // 橫軸固定 10 格
+      var slot = plotW / SLOTS;
+      var pts = weights.slice(-SLOTS); // 最近 10 筆
+      var n = pts.length;
+      function x(i) { return padL + slot * (i + 0.5); }
 
-      var vals = weights.map(function (w) { return w.weightKg; });
+      var vals = pts.map(function (w) { return w.weightKg; });
       var minW = Math.min.apply(null, vals);
       var maxW = Math.max.apply(null, vals);
       var pad = maxW === minW ? 1 : (maxW - minW) * 0.25;
@@ -292,31 +293,26 @@
       });
 
       // 折線
-      if (weights.length > 1) {
-        var pts = weights.map(function (w) {
-          return x(w.date).toFixed(1) + ',' + y(w.weightKg).toFixed(1);
+      if (n > 1) {
+        var line = pts.map(function (w, i) {
+          return x(i).toFixed(1) + ',' + y(w.weightKg).toFixed(1);
         }).join(' ');
-        parts.push('<polyline points="' + pts + '" fill="none" stroke="' + COLOR.weight +
+        parts.push('<polyline points="' + line + '" fill="none" stroke="' + COLOR.weight +
           '" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>');
       }
-      // 資料點 + 端點數值 (點多時只標頭尾, 避免文字重疊)
-      var labelEach = weights.length <= 8;
-      for (var i = 0; i < weights.length; i++) {
-        var w = weights[i];
-        var cx = x(w.date), cy = y(w.weightKg);
+      for (var i = 0; i < n; i++) {
+        var w = pts[i];
+        var cx = x(i), cy = y(w.weightKg);
         parts.push('<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="4" fill="' +
           COLOR.weight + '"/>');
-        if (labelEach || i === 0 || i === weights.length - 1) {
+        // 體重值只標頭尾, 避免 10 點都標而重疊
+        if (i === 0 || i === n - 1) {
           parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (cy - 10).toFixed(1) +
             '" text-anchor="middle">' + w.weightKg + '</text>');
         }
-      }
-      // x 軸:頭尾日期
-      parts.push('<text class="axis-label" x="' + padL + '" y="' + (H - 12) +
-        '" text-anchor="start">' + fmtDay(weights[0].date) + '</text>');
-      if (weights.length > 1) {
-        parts.push('<text class="axis-label" x="' + (W - padR) + '" y="' + (H - 12) +
-          '" text-anchor="end">' + fmtDay(weights[weights.length - 1].date) + '</text>');
+        // 每點下方寫日期
+        parts.push('<text class="date-label" x="' + cx.toFixed(1) + '" y="' + (H - 12) +
+          '" text-anchor="middle">' + fmtDay(w.date) + '</text>');
       }
 
       return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
@@ -501,8 +497,8 @@
       if (weights.length > 0) {
         html += '<div class="chart-card" style="margin-top:14px">' +
           '<div class="chart-head"><h2>體重變化</h2>' +
-          '<span class="hint">近 ' + state.range + ' 天</span></div>' +
-          '<div class="chart-wrap">' + renderWeightChart(weights, data.series) + '</div>' +
+          '<span class="hint">最近 10 次</span></div>' +
+          '<div class="chart-wrap">' + renderWeightChart(weights) + '</div>' +
           '</div>';
       }
 
