@@ -181,7 +181,7 @@
     'use strict';
 
     var LIFF_ID = '__LIFF_ID__';
-    var COLOR = { met: '#16A34A', near: '#F59E0B', over: '#DC2626', track: '#E5E7EB', sub: '#6B7280', heart: '#E11D48' };
+    var COLOR = { met: '#16A34A', near: '#F59E0B', over: '#DC2626', track: '#E5E7EB', sub: '#6B7280', heart: '#E11D48', weight: '#7C3AED' };
     // 各餐別色盤 (對齊 MEAL_LABELS 順序)
     var MEAL_COLOR = {
       breakfast: '#F59E0B', lunch: '#16A34A', dinner: '#6366F1',
@@ -256,6 +256,71 @@
 
       return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
         'aria-label="每日卡路里赤字長條圖">' + parts.join('') + '</svg>';
+    }
+
+    // 體重變化折線圖。weights 稀疏 (只含有記錄日), x 依實際日期落在 series 的時間軸上,
+    // 與每日赤字圖對齊;y 依體重範圍自動縮放 (上下留白)。
+    function renderWeightChart(weights, series) {
+      var W = 480, H = 240;
+      var padL = 38, padR = 14, padTop = 26, padBottom = 44;
+      var plotW = W - padL - padR;
+      var plotH = H - padTop - padBottom;
+
+      var startMs = Date.parse(series[0].date + 'T00:00:00Z');
+      var endMs = Date.parse(series[series.length - 1].date + 'T00:00:00Z');
+      var spanMs = Math.max(1, endMs - startMs);
+      function x(iso) {
+        var t = Date.parse(iso + 'T00:00:00Z');
+        return padL + (series.length === 1 ? plotW / 2 : (t - startMs) / spanMs * plotW);
+      }
+
+      var vals = weights.map(function (w) { return w.weightKg; });
+      var minW = Math.min.apply(null, vals);
+      var maxW = Math.max.apply(null, vals);
+      var pad = maxW === minW ? 1 : (maxW - minW) * 0.25;
+      var lo = minW - pad, hi = maxW + pad;
+      function y(v) { return padTop + (hi - v) / (hi - lo) * plotH; }
+
+      var parts = [];
+      // y 軸三條參考線 + 刻度 (hi / 中 / lo)
+      [hi, (hi + lo) / 2, lo].forEach(function (gv) {
+        var gy = y(gv);
+        parts.push('<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (W - padR) +
+          '" y2="' + gy.toFixed(1) + '" stroke="' + COLOR.track + '" stroke-width="1"/>');
+        parts.push('<text class="axis-label" x="' + (padL - 6) + '" y="' + (gy + 9).toFixed(1) +
+          '" text-anchor="end">' + gv.toFixed(1) + '</text>');
+      });
+
+      // 折線
+      if (weights.length > 1) {
+        var pts = weights.map(function (w) {
+          return x(w.date).toFixed(1) + ',' + y(w.weightKg).toFixed(1);
+        }).join(' ');
+        parts.push('<polyline points="' + pts + '" fill="none" stroke="' + COLOR.weight +
+          '" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>');
+      }
+      // 資料點 + 端點數值 (點多時只標頭尾, 避免文字重疊)
+      var labelEach = weights.length <= 8;
+      for (var i = 0; i < weights.length; i++) {
+        var w = weights[i];
+        var cx = x(w.date), cy = y(w.weightKg);
+        parts.push('<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="4" fill="' +
+          COLOR.weight + '"/>');
+        if (labelEach || i === 0 || i === weights.length - 1) {
+          parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (cy - 10).toFixed(1) +
+            '" text-anchor="middle">' + w.weightKg + '</text>');
+        }
+      }
+      // x 軸:頭尾日期
+      parts.push('<text class="axis-label" x="' + padL + '" y="' + (H - 12) +
+        '" text-anchor="start">' + fmtDay(weights[0].date) + '</text>');
+      if (weights.length > 1) {
+        parts.push('<text class="axis-label" x="' + (W - padR) + '" y="' + (H - 12) +
+          '" text-anchor="end">' + fmtDay(weights[weights.length - 1].date) + '</text>');
+      }
+
+      return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
+        'aria-label="體重變化折線圖">' + parts.join('') + '</svg>';
     }
 
     function renderMealChart(meals, expanded) {
@@ -430,6 +495,16 @@
         html += '<div class="empty-note">這段期間還沒有記錄 📭<br>回 LINE 記一餐就會出現囉</div>';
       }
       html += '</div>'; // /chart-card (每日赤字)
+
+      // 體重變化圖卡:有體重記錄才顯示 (沿用目前區間)。
+      var weights = data.weights || [];
+      if (weights.length > 0) {
+        html += '<div class="chart-card" style="margin-top:14px">' +
+          '<div class="chart-head"><h2>體重變化</h2>' +
+          '<span class="hint">近 ' + state.range + ' 天</span></div>' +
+          '<div class="chart-wrap">' + renderWeightChart(weights, data.series) + '</div>' +
+          '</div>';
+      }
 
       // 各餐別攝取圖卡:過往 7 天, 每天一個 tab (末筆=今天)。
       var mealDays = data.mealDays || [];

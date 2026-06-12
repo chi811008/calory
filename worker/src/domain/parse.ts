@@ -43,6 +43,8 @@ export type ParsedMessage =
   | { kind: 'deleteExercise'; index: number }
   | { kind: 'setGoal'; goalKg: number }
   | { kind: 'showGoal' }
+  | { kind: 'setWeight'; weightKg: number }
+  | { kind: 'showWeight' }
   | { kind: 'log'; items: LogItem[] };
 
 const MEAL_KEYWORDS: { re: RegExp; meal: Meal }[] = [
@@ -70,6 +72,9 @@ const DELETE_EXERCISE_RE = /^刪運動\s+(\d+)\s*$/;
 // 減重目標:「目標 4 公斤」「目標4」「目標 4 kg」皆可;單獨「目標」查詢目前設定。
 const SET_GOAL_RE = /^目標\s*(\d+(?:\.\d+)?)\s*(?:公斤|kg)?\s*$/i;
 const SHOW_GOAL_RE = /^目標$/;
+// 體重:「體重 70」「體重70.5」「體重 70 公斤/kg」皆可;單獨「體重」查最近一次。
+const SET_WEIGHT_RE = /^體重\s*(\d+(?:\.\d+)?)\s*(?:公斤|kg)?\s*$/i;
+const SHOW_WEIGHT_RE = /^體重$/;
 
 const NUMBER_RE = /-?\d+(\.\d+)?/;
 
@@ -219,6 +224,13 @@ export function parseMessage(raw: string): ParsedMessage {
     if (sg) {
       const goalKg = Math.round(Number(sg[1]));
       if (goalKg > 0) return { kind: 'setGoal', goalKg };
+    }
+
+    if (SHOW_WEIGHT_RE.test(one)) return { kind: 'showWeight' };
+    const sw = one.match(SET_WEIGHT_RE);
+    if (sw) {
+      const weightKg = Number(sw[1]);
+      if (weightKg > 0) return { kind: 'setWeight', weightKg };
     }
   }
 

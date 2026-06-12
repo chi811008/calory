@@ -203,6 +203,54 @@ export async function insertExercise(
     .run();
 }
 
+export interface WeightPoint {
+  date: string; // YYYY-MM-DD
+  weightKg: number;
+}
+
+/**
+ * 記某日體重。一天一筆:先刪同日舊記錄再插入 (取最後一次), 曲線才不會同日多點。
+ * 用刪後插而非 unique index, 避免動到已部署的 weight_logs 資料表。
+ */
+export async function insertWeight(
+  env: Env,
+  userId: string,
+  date: string,
+  weightKg: number,
+): Promise<void> {
+  await env.DB.prepare('DELETE FROM weight_logs WHERE user_id = ? AND date = ?')
+    .bind(userId, date)
+    .run();
+  await env.DB.prepare('INSERT INTO weight_logs (user_id, date, weight_kg) VALUES (?, ?, ?)')
+    .bind(userId, date, weightKg)
+    .run();
+}
+
+/** 取區間 [fromDate, toDate] 內的體重記錄, 依日期升冪 (一天一筆, 寫入端已去重)。 */
+export async function getWeightLogs(
+  env: Env,
+  userId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<WeightPoint[]> {
+  const res = await env.DB.prepare(
+    'SELECT date, weight_kg FROM weight_logs WHERE user_id = ? AND date BETWEEN ? AND ? ORDER BY date, id',
+  )
+    .bind(userId, fromDate, toDate)
+    .all<{ date: string; weight_kg: number }>();
+  return (res.results ?? []).map((r) => ({ date: r.date, weightKg: Number(r.weight_kg) }));
+}
+
+/** 取最近一次體重記錄 (查詢用); 無記錄則 null。 */
+export async function getLatestWeight(env: Env, userId: string): Promise<WeightPoint | null> {
+  const res = await env.DB.prepare(
+    'SELECT date, weight_kg FROM weight_logs WHERE user_id = ? ORDER BY date DESC, id DESC LIMIT 1',
+  )
+    .bind(userId)
+    .first<{ date: string; weight_kg: number }>();
+  return res ? { date: res.date, weightKg: Number(res.weight_kg) } : null;
+}
+
 export interface Preset {
   label: string;
   calories: number;

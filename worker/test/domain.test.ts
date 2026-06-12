@@ -331,6 +331,18 @@ describe('parseMessage — 控制指令', () => {
     expect(parseMessage('目標')).toEqual({ kind: 'showGoal' });
   });
 
+  it('體重 N → setWeight (容許有無「公斤」/空白, 保留小數供曲線)', () => {
+    // WHY: 體重要畫變化曲線, 不能像目標四捨五入掉小數 (70.5 與 70 是不同點)。
+    expect(parseMessage('體重 70')).toEqual({ kind: 'setWeight', weightKg: 70 });
+    expect(parseMessage('體重70.5')).toEqual({ kind: 'setWeight', weightKg: 70.5 });
+    expect(parseMessage('體重 68 公斤')).toEqual({ kind: 'setWeight', weightKg: 68 });
+    expect(parseMessage('體重 68 kg')).toEqual({ kind: 'setWeight', weightKg: 68 });
+  });
+
+  it('單獨「體重」 → showWeight (查最近一次)', () => {
+    expect(parseMessage('體重')).toEqual({ kind: 'showWeight' });
+  });
+
   it('運動指令不可被「運動 N 記錄」或「改/刪 N」誤判 (順序)', () => {
     // WHY: 「運動清單」開頭是運動關鍵字,須在控制指令層先判,否則落入記錄批次;
     //      「改運動/刪運動」也須早於 editFood/deleteFood,免得被當成食物序號。

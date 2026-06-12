@@ -1,6 +1,12 @@
 import type { Env } from '../types';
 import { verifyIdToken } from '../line/verify';
-import { ensureUser, getDailyTotals, getMealItemsByDay, getCumulativeStats } from '../db/repo';
+import {
+  ensureUser,
+  getDailyTotals,
+  getMealItemsByDay,
+  getCumulativeStats,
+  getWeightLogs,
+} from '../db/repo';
 import { localDate, addDays, localParts } from '../domain/date';
 import { buildDashboard } from '../domain/dashboard';
 import { cumulativeNetDeficit } from '../domain/weight';
@@ -35,6 +41,8 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
     const today = localDate(user.tz);
     const fromDate = addDays(today, -(WINDOW_DAYS - 1));
     const totals = await getDailyTotals(env, userId, fromDate, today);
+    // 體重曲線:取完整視窗, domain 再依 rangeDays 裁切。
+    const weightLogs = await getWeightLogs(env, userId, fromDate, today);
 
     // 各餐別圖:保留過往 7 天 (今天 + 前 6 天),每天一個 tab。逐筆食物 (供點開明細)。
     const mealFrom = addDays(today, -(MEAL_WINDOW_DAYS - 1));
@@ -65,6 +73,7 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
       user.goalKg,
       cumulativeDeficit,
       todaySettled,
+      weightLogs,
     );
     return json({ success: true, data: dashboard });
   } catch (err) {

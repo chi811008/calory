@@ -178,6 +178,27 @@ describe('buildDashboard', () => {
     ).toBe(true);
   });
 
+  it('weights: 依 rangeDays 視窗裁切, 升冪原樣保留', () => {
+    // WHY: 體重曲線要跟每日赤字圖同一時間窗;區間外的舊點不該畫進來。
+    const dates = rangeDates('2026-06-02', 30); // 視窗 05-04..06-02
+    const weightLogs = [
+      { date: '2026-05-10', weightKg: 72 }, // rangeDays=14 視窗 (起 05-20) 外 → 濾掉
+      { date: '2026-05-25', weightKg: 71.5 },
+      { date: '2026-06-02', weightKg: 70.8 },
+    ];
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS, 0, 0, false, weightLogs);
+    expect(d.weights).toEqual([
+      { date: '2026-05-25', weightKg: 71.5 },
+      { date: '2026-06-02', weightKg: 70.8 },
+    ]);
+  });
+
+  it('weights: 沒傳體重 → 空陣列 (前端不顯示曲線卡)', () => {
+    const dates = rangeDates('2026-06-02', 30);
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS);
+    expect(d.weights).toEqual([]);
+  });
+
   it('goal: 未設定目標 (goalKg=0) → goal 為 null', () => {
     const dates = rangeDates('2026-06-02', 30);
     const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS, 0, 12000);

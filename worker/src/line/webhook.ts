@@ -16,6 +16,7 @@ import {
   handleDeleteExercise,
 } from '../handlers/editExercise';
 import { handleSetGoal, handleShowGoal } from '../handlers/goal';
+import { handleSetWeight, handleShowWeight } from '../handlers/weight';
 import { startOnboarding, handleOnboarding } from '../handlers/onboarding';
 import { handlePhoto, confirmPhoto, cancelPhoto } from '../handlers/photo';
 import { replyMessage } from './client';
@@ -79,6 +80,10 @@ export async function handleEvent(event: any, env: Env): Promise<void> {
         return handleSetGoal(env, user, cmd.goalKg, replyToken);
       case 'showGoal':
         return handleShowGoal(env, user, replyToken);
+      case 'setWeight':
+        return handleSetWeight(env, user, cmd.weightKg, replyToken);
+      case 'showWeight':
+        return handleShowWeight(env, user, replyToken);
       default:
         return replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [helpMessage()]);
     }

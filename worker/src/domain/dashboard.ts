@@ -2,7 +2,7 @@ import { computeDay } from './calories';
 import { summarizeWeek, type WeekSummary } from './weekly';
 import { currentStreak, streakBadge, type DayMet } from './streak';
 import { KCAL_PER_KG, heartFills } from './weight';
-import type { DayTotals } from '../db/repo';
+import type { DayTotals, WeightPoint } from '../db/repo';
 import { MEAL_LABELS, type Meal, type MealItem } from '../types';
 
 // 各餐別圖固定排列順序 (與 MEAL_LABELS 一致), 缺的餐別補 0 方便比較。
@@ -47,6 +47,7 @@ export interface Dashboard {
   tdee: number;
   target: number; // 目標赤字
   series: DashboardPoint[]; // 升冪, 長度 = rangeDays, 未記錄日以 0 補
+  weights: WeightPoint[]; // 區間內的體重記錄 (升冪, 稀疏:只含有記錄日); 空陣列 = 不顯示曲線
   mealDays: MealDay[]; // 過往 7 天各餐別攝取 (升冪, 末筆=今天), 每天一個 tab
   goal: GoalProgress | null; // 減重目標愛心進度 (全程累積); 未設定目標則為 null
   week: WeekSummary; // 最近 7 天 (僅計有記錄日)
@@ -74,6 +75,7 @@ export function buildDashboard(
   goalKg = 0, // 0 = 未設定減重目標
   cumulativeDeficit = 0, // 全程累積淨赤字 (跨所有日期), 換算愛心進度用
   todaySettled = false, // 今天是否已結算 (睡前統計窗); 未結算則今天不計入 streak
+  weightLogs: WeightPoint[] = [], // 體重記錄 (升冪, 呼叫端給完整視窗); 依 rangeDays 裁切
 ): Dashboard {
   const allPoints: DashboardPoint[] = dates.map((date) => {
     const t = totals.get(date);
@@ -124,10 +126,15 @@ export function buildDashboard(
       ? { goalKg, lostKg, hearts: heartFills(lostKg, goalKg), achieved: lostKg >= goalKg }
       : null;
 
+  // 體重曲線:裁切到目前圖表區間 (與每日赤字圖同一視窗起點)。
+  const windowStart = dates[Math.max(0, dates.length - rangeDays)];
+  const weights = weightLogs.filter((w) => w.date >= windowStart);
+
   return {
     tdee,
     target: targetDeficit,
     series: allPoints.slice(-rangeDays),
+    weights,
     mealDays,
     goal,
     week,
