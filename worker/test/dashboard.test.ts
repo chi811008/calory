@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildDashboard } from '../src/domain/dashboard';
 import type { DayTotals } from '../src/db/repo';
-import type { Meal } from '../src/types';
+import type { Meal, MealItem } from '../src/types';
 
-const NO_MEALS = new Map<string, Map<Meal, number>>();
+const NO_MEALS = new Map<string, Map<Meal, MealItem[]>>();
 
 // 建一段升冪日期 (endDate 往回 n 天, 含 endDate), 最後一天為「今日」。
 function rangeDates(endDate: string, n: number): string[] {
@@ -119,14 +119,22 @@ describe('buildDashboard', () => {
     expect(d.badge).toBeNull();
   });
 
-  it('mealDays: 過往 7 天 (末筆=今天), 每天 5 類固定順序與標籤, 缺的補 0', () => {
+  it('mealDays: 過往 7 天 (末筆=今天), 每天 5 類固定順序與標籤, 缺的補空', () => {
     const dates = rangeDates('2026-06-02', 30);
-    const mealDayTotals = new Map<string, Map<Meal, number>>([
-      ['2026-06-02', new Map<Meal, number>([['breakfast', 300], ['dinner', 700], ['drink', 150]])],
-      ['2026-05-30', new Map<Meal, number>([['lunch', 500]])],
+    const mealDayItems = new Map<string, Map<Meal, MealItem[]>>([
+      [
+        '2026-06-02',
+        new Map<Meal, MealItem[]>([
+          ['breakfast', [{ label: '蛋餅', calories: 300 }]],
+          // 晚餐兩筆:總熱量要由 items 加總, 順序原樣保留 (repo 已排序)
+          ['dinner', [{ label: '炸雞', calories: 500 }, { label: '白飯', calories: 200 }]],
+          ['drink', [{ label: null, calories: 150 }]],
+        ]),
+      ],
+      ['2026-05-30', new Map<Meal, MealItem[]>([['lunch', [{ label: '牛肉麵', calories: 500 }]]])],
     ]);
 
-    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, mealDayTotals);
+    const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, mealDayItems);
 
     // 7 天, 升冪, 末筆 = 今天
     expect(d.mealDays).toHaveLength(7);
@@ -141,20 +149,32 @@ describe('buildDashboard', () => {
       'drink',
     ]);
     expect(today.meals.map((m) => m.label)).toEqual(['早餐', '午餐', '晚餐', '點心', '飲料']);
-    // 今天:有記錄的餐別帶入, 缺的補 0;加總一致
+    // 餐別總熱量 = items 加總 (單一資料來源);缺的餐別補 0
     expect(today.meals.map((m) => m.calories)).toEqual([300, 0, 700, 0, 150]);
     expect(today.meals.reduce((a, m) => a + m.calories, 0)).toBe(1150);
+    // 晚餐保留逐筆明細 (供點開 bar 顯示), 順序原樣
+    const dinner = today.meals.find((m) => m.meal === 'dinner')!;
+    expect(dinner.items).toEqual([
+      { label: '炸雞', calories: 500 },
+      { label: '白飯', calories: 200 },
+    ]);
+    // 沒記錄的餐別 items 為空陣列
+    expect(today.meals.find((m) => m.meal === 'lunch')!.items).toEqual([]);
     // 5/30 只記午餐, 其餘 0;且各自獨立 (不會混到別天)
     const d530 = d.mealDays.find((x) => x.date === '2026-05-30')!;
     expect(d530.meals.map((m) => m.calories)).toEqual([0, 500, 0, 0, 0]);
   });
 
-  it('mealDays: 完全沒記錄 → 7 天每天 5 類皆 0', () => {
+  it('mealDays: 完全沒記錄 → 7 天每天 5 類皆 0 且 items 為空', () => {
     const dates = rangeDates('2026-06-02', 30);
     const d = buildDashboard(dates, new Map(), TDEE, TARGET, 14, NO_MEALS);
     expect(d.mealDays).toHaveLength(7);
     expect(
-      d.mealDays.every((day) => day.meals.length === 5 && day.meals.every((m) => m.calories === 0)),
+      d.mealDays.every(
+        (day) =>
+          day.meals.length === 5 &&
+          day.meals.every((m) => m.calories === 0 && m.items.length === 0),
+      ),
     ).toBe(true);
   });
 

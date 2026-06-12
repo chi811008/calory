@@ -22,6 +22,12 @@ export const MEAL_LABELS: Record<Meal, string> = {
   drink: '飲料',
 };
 
+// 各餐別圖點開 bar 時要顯示的單筆食物項目。label 為 null 的記錄由顯示端補餐別名。
+export interface MealItem {
+  label: string | null;
+  calories: number;
+}
+
 export interface User {
   lineUserId: string;
   sex: Sex;

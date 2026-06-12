@@ -1,4 +1,4 @@
-import type { Env, Meal, Sex, User } from '../types';
+import type { Env, Meal, MealItem, Sex, User } from '../types';
 import type { OnboardingDraft, OnboardingSettings } from '../domain/onboarding';
 import type { PhotoEstimate } from '../domain/photo';
 
@@ -455,28 +455,38 @@ export async function getDailyTotals(
 }
 
 /**
- * 取得日期區間 [fromDate, toDate] 內,「每一天 × 每餐別」的攝取總熱量。
- * 回 Map<date, Map<meal, total>>;只含有記錄的日期/餐別,缺的由 domain 補 0。
+ * 取得日期區間 [fromDate, toDate] 內,「每一天 × 每餐別」的逐筆食物項目。
+ * 回 Map<date, Map<meal, MealItem[]>>;只含有記錄的日期/餐別,缺的由 domain 補空。
+ * 每餐別內依熱量由高到低排序 (相同再依 id),點開 bar 時可一眼看到最大來源。
+ * 餐別總熱量由 domain 端對 items 加總,保持單一資料來源。
  */
-export async function getMealTotalsByDay(
+export async function getMealItemsByDay(
   env: Env,
   userId: string,
   fromDate: string,
   toDate: string,
-): Promise<Map<string, Map<Meal, number>>> {
-  const map = new Map<string, Map<Meal, number>>();
+): Promise<Map<string, Map<Meal, MealItem[]>>> {
+  const map = new Map<string, Map<Meal, MealItem[]>>();
   const res = await env.DB.prepare(
-    'SELECT date, meal, SUM(calories) AS total FROM food_logs WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY date, meal',
+    'SELECT date, meal, label, calories FROM food_logs WHERE user_id = ? AND date BETWEEN ? AND ? ORDER BY date, meal, calories DESC, id',
   )
     .bind(userId, fromDate, toDate)
-    .all<{ date: string; meal: Meal; total: number }>();
+    .all<{ date: string; meal: Meal; label: string | null; calories: number }>();
   for (const r of res.results ?? []) {
     let day = map.get(r.date);
     if (!day) {
-      day = new Map<Meal, number>();
+      day = new Map<Meal, MealItem[]>();
       map.set(r.date, day);
     }
-    day.set(r.meal, Number(r.total));
+    let items = day.get(r.meal);
+    if (!items) {
+      items = [];
+      day.set(r.meal, items);
+    }
+    items.push({
+      label: r.label === null || r.label === undefined ? null : String(r.label),
+      calories: Number(r.calories),
+    });
   }
   return map;
 }

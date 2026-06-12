@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { verifyIdToken } from '../line/verify';
-import { ensureUser, getDailyTotals, getMealTotalsByDay, getCumulativeStats } from '../db/repo';
+import { ensureUser, getDailyTotals, getMealItemsByDay, getCumulativeStats } from '../db/repo';
 import { localDate, addDays, localParts } from '../domain/date';
 import { buildDashboard } from '../domain/dashboard';
 import { cumulativeNetDeficit } from '../domain/weight';
@@ -36,9 +36,9 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
     const fromDate = addDays(today, -(WINDOW_DAYS - 1));
     const totals = await getDailyTotals(env, userId, fromDate, today);
 
-    // 各餐別圖:保留過往 7 天 (今天 + 前 6 天),每天一個 tab。
+    // 各餐別圖:保留過往 7 天 (今天 + 前 6 天),每天一個 tab。逐筆食物 (供點開明細)。
     const mealFrom = addDays(today, -(MEAL_WINDOW_DAYS - 1));
-    const mealDayTotals = await getMealTotalsByDay(env, userId, mealFrom, today);
+    const mealDayItems = await getMealItemsByDay(env, userId, mealFrom, today);
 
     // 減重目標愛心:用全程累積淨赤字 (與每日卡的「累積淨赤字」同一套帳), 不隨區間變。
     const cum = await getCumulativeStats(env, userId);
@@ -61,7 +61,7 @@ export async function handleDashboardApi(env: Env, req: Request): Promise<Respon
       user.tdee,
       user.targetDeficit,
       rangeDays,
-      mealDayTotals,
+      mealDayItems,
       user.goalKg,
       cumulativeDeficit,
       todaySettled,

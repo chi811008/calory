@@ -151,6 +151,24 @@
     .empty-note { text-align: center; color: var(--sub); font-size: 0.82rem; padding: 28px 0; }
     .goal-meta { text-align: center; margin-top: 10px; font-size: 0.95rem; color: var(--text); }
     .goal-meta b { font-size: 1.5rem; font-weight: 800; color: #E11D48; letter-spacing: -0.02em; }
+
+    /* 各餐別 bar 點開的明細 */
+    .meal-tip { text-align: center; color: var(--sub); font-size: 0.72rem; margin: -2px 0 4px; }
+    .meal-detail {
+      margin-top: 10px; border-top: 1px solid var(--line); padding-top: 12px;
+    }
+    .meal-detail-head {
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+    }
+    .meal-detail-head .swatch { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; align-self: center; }
+    .meal-detail-head h3 { font-size: 0.95rem; font-weight: 750; color: var(--text); }
+    .meal-detail-head .sum { margin-left: auto; font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .meal-detail ul { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+    .meal-detail li { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+    .meal-detail .item-name { color: var(--text); flex: 0 0 auto; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meal-detail .item-track { flex: 1 1 auto; height: 7px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+    .meal-detail .item-fill { height: 100%; border-radius: 999px; }
+    .meal-detail .item-kcal { flex: 0 0 auto; color: var(--sub); font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
   </style>
 </head>
 <body>
@@ -169,7 +187,7 @@
       breakfast: '#F59E0B', lunch: '#16A34A', dinner: '#6366F1',
       snack: '#EC4899', drink: '#06B6D4'
     };
-    var state = { range: 14, idToken: null, data: null, mealDay: null };
+    var state = { range: 14, idToken: null, data: null, mealDay: null, mealExpanded: null };
 
     function el(id) { return document.getElementById(id); }
     function showMsg(text, isError) {
@@ -240,7 +258,7 @@
         'aria-label="每日卡路里赤字長條圖">' + parts.join('') + '</svg>';
     }
 
-    function renderMealChart(meals) {
+    function renderMealChart(meals, expanded) {
       var W = 480, H = 260;
       var padL = 8, padR = 8, padTop = 46, padBottom = 46;
       var n = meals.length;
@@ -265,24 +283,58 @@
         var hgt = h(m.calories);
         var top = baseY - hgt;
         var fill = MEAL_COLOR[m.meal] || COLOR.sub;
+        var isSel = m.meal === expanded;
+        // 整欄透明點擊區 (含 0 卡與留白), 放大觸控目標; data-meal 供事件代理。
+        parts.push('<rect class="meal-hit" data-meal="' + m.meal + '" x="' +
+          (padL + slot * i).toFixed(1) + '" y="' + padTop.toFixed(1) + '" width="' +
+          slot.toFixed(1) + '" height="' + plotH.toFixed(1) +
+          '" fill="transparent" style="cursor:pointer"/>');
         if (m.calories > 0) {
-          parts.push('<rect x="' + bx.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' +
-            barW.toFixed(1) + '" height="' + hgt.toFixed(1) + '" rx="3" fill="' + fill + '"/>');
+          parts.push('<rect data-meal="' + m.meal + '" x="' + bx.toFixed(1) + '" y="' +
+            top.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hgt.toFixed(1) +
+            '" rx="3" fill="' + fill + '" style="pointer-events:none"' +
+            (isSel ? ' stroke="' + COLOR.text + '" stroke-width="2.5"' : '') + '/>');
         } else {
           // 0 卡:底線上一條細小空條, 維持並排可見
           parts.push('<rect x="' + bx.toFixed(1) + '" y="' + (baseY - 2).toFixed(1) + '" width="' +
-            barW.toFixed(1) + '" height="2" rx="1" fill="' + COLOR.track + '"/>');
+            barW.toFixed(1) + '" height="2" rx="1" fill="' + COLOR.track +
+            '" style="pointer-events:none"/>');
         }
         // 卡數標於條頂
         parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' +
-          (top - 8).toFixed(1) + '" text-anchor="middle">' + m.calories + '</text>');
+          (top - 8).toFixed(1) + '" text-anchor="middle" style="pointer-events:none">' +
+          m.calories + '</text>');
         // 餐別名標於底
         parts.push('<text class="axis-label" x="' + cx.toFixed(1) + '" y="' + (H - 14) +
-          '" text-anchor="middle">' + m.label + '</text>');
+          '" text-anchor="middle" style="pointer-events:none">' + m.label + '</text>');
       }
 
       return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
-        'aria-label="各餐別攝取熱量長條圖">' + parts.join('') + '</svg>';
+        'aria-label="各餐別攝取熱量長條圖, 點長條看明細">' + parts.join('') + '</svg>';
+    }
+
+    // 某餐別點開後的明細清單:逐筆食物 (已由後端依熱量高→低排序), 配迷你橫條。
+    function renderMealDetail(bar) {
+      var fill = MEAL_COLOR[bar.meal] || COLOR.sub;
+      var maxV = Math.max.apply(null, bar.items.map(function (it) { return it.calories; }).concat([1]));
+      var rows = bar.items.map(function (it) {
+        var name = it.label ? esc(it.label) : bar.label;
+        var pct = Math.max(4, it.calories / maxV * 100);
+        return '<li><span class="item-name">' + name + '</span>' +
+          '<span class="item-track"><span class="item-fill" style="width:' + pct.toFixed(1) +
+          '%;background:' + fill + '"></span></span>' +
+          '<span class="item-kcal">' + it.calories + '</span></li>';
+      }).join('');
+      return '<div class="meal-detail">' +
+        '<div class="meal-detail-head"><span class="swatch" style="background:' + fill + '"></span>' +
+        '<h3>' + bar.label + '</h3><span class="sum">' + bar.calories + ' kcal</span></div>' +
+        '<ul>' + rows + '</ul></div>';
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
     }
 
     // 減重目標愛心:每顆 = 1 公斤, 依 fill 比例 (0..1) 由下往上填滿。
@@ -398,7 +450,17 @@
       }
       html += '</div>';
       if (hasMeal) {
-        html += '<div class="chart-wrap">' + renderMealChart(dayMeals) + '</div>';
+        // 點開的餐別必須是該日「有記錄」的; 切日後若該餐別當天沒吃就視為未展開。
+        var expandedBar = null;
+        if (state.mealExpanded != null) {
+          expandedBar = dayMeals.filter(function (m) {
+            return m.meal === state.mealExpanded && m.items.length > 0;
+          })[0] || null;
+        }
+        var expandedMeal = expandedBar ? expandedBar.meal : null;
+        html += '<div class="meal-tip">' + (expandedBar ? '再點一下長條收合' : '點長條看吃了什麼 👆') + '</div>';
+        html += '<div class="chart-wrap">' + renderMealChart(dayMeals, expandedMeal) + '</div>';
+        if (expandedBar) html += renderMealDetail(expandedBar);
       } else {
         html += '<div class="empty-note">' + (isToday ? '今天' : '這天') + '還沒有飲食記錄 🍽️</div>';
       }
@@ -430,6 +492,17 @@
           var d = Number(e.currentTarget.getAttribute('data-mealday'));
           if (d === state.mealDay) return;
           state.mealDay = d;
+          state.mealExpanded = null; // 換日後收合明細 (項目不同)
+          view(state.data);
+        });
+      }
+
+      // 各餐別長條:點一下展開該餐別明細, 再點同一根收合 (事件代理於 [data-meal])
+      var mealHits = document.querySelectorAll('[data-meal]');
+      for (var k = 0; k < mealHits.length; k++) {
+        mealHits[k].addEventListener('click', function (e) {
+          var meal = e.currentTarget.getAttribute('data-meal');
+          state.mealExpanded = state.mealExpanded === meal ? null : meal;
           view(state.data);
         });
       }

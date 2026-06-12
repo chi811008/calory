@@ -3,7 +3,7 @@ import { summarizeWeek, type WeekSummary } from './weekly';
 import { currentStreak, streakBadge, type DayMet } from './streak';
 import { KCAL_PER_KG, heartFills } from './weight';
 import type { DayTotals } from '../db/repo';
-import { MEAL_LABELS, type Meal } from '../types';
+import { MEAL_LABELS, type Meal, type MealItem } from '../types';
 
 // 各餐別圖固定排列順序 (與 MEAL_LABELS 一致), 缺的餐別補 0 方便比較。
 const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'];
@@ -25,7 +25,8 @@ export interface DashboardPoint {
 export interface MealBar {
   meal: Meal;
   label: string;
-  calories: number;
+  calories: number; // 該餐別總熱量 = items 加總
+  items: MealItem[]; // 該餐別逐筆食物 (依熱量高→低), 點開 bar 時顯示明細; 缺則為空陣列
 }
 
 export interface MealDay {
@@ -69,7 +70,7 @@ export function buildDashboard(
   tdee: number,
   targetDeficit: number,
   rangeDays: number,
-  mealDayTotals: Map<string, Map<Meal, number>>, // 過往 7 天的「日×餐別」攝取
+  mealDayItems: Map<string, Map<Meal, MealItem[]>>, // 過往 7 天的「日×餐別」逐筆食物
   goalKg = 0, // 0 = 未設定減重目標
   cumulativeDeficit = 0, // 全程累積淨赤字 (跨所有日期), 換算愛心進度用
   todaySettled = false, // 今天是否已結算 (睡前統計窗); 未結算則今天不計入 streak
@@ -98,16 +99,21 @@ export function buildDashboard(
     .filter((t): t is DayTotals => t !== undefined);
   const week = summarizeWeek(weekDays, tdee, targetDeficit);
 
-  // 各餐別:過往 7 天 (今天 + 前 6 天),每天 5 類固定順序、缺的補 0。
+  // 各餐別:過往 7 天 (今天 + 前 6 天),每天 5 類固定順序、缺的補空。
+  // 餐別總熱量由 items 加總而來 (單一資料來源),items 已由 repo 依熱量高→低排序。
   const mealDays: MealDay[] = dates.slice(-MEAL_WINDOW_DAYS).map((date) => {
-    const dayTotals = mealDayTotals.get(date);
+    const dayItems = mealDayItems.get(date);
     return {
       date,
-      meals: MEAL_ORDER.map((meal) => ({
-        meal,
-        label: MEAL_LABELS[meal],
-        calories: dayTotals?.get(meal) ?? 0,
-      })),
+      meals: MEAL_ORDER.map((meal) => {
+        const items = dayItems?.get(meal) ?? [];
+        return {
+          meal,
+          label: MEAL_LABELS[meal],
+          calories: items.reduce((sum, it) => sum + it.calories, 0),
+          items,
+        };
+      }),
     };
   });
 
