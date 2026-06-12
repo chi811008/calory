@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { advance, finalize, nextStep, type OnboardingDraft } from '../domain/onboarding';
-import { clearOnboarding, saveUserSettings, setOnboarding } from '../db/repo';
+import { clearOnboarding, getUser, insertWeight, saveUserSettings, setOnboarding } from '../db/repo';
+import { localDate } from '../domain/date';
 import { onboardingPrompt, onboardingDone } from '../line/onboarding';
 import { replyMessage } from '../line/client';
 
@@ -45,6 +46,10 @@ export async function handleOnboarding(
   if (next === null) {
     const settings = finalize(result.draft);
     await saveUserSettings(env, userId, settings);
+    // 把起始體重種進體重記錄表, 讓儀表板曲線從第一天就有資料點。
+    // saveUserSettings 只更新 users.weight_kg, 不會進 weight_logs (曲線讀的是後者)。
+    const user = await getUser(env, userId);
+    if (user) await insertWeight(env, userId, localDate(user.tz), settings.weightKg);
     await clearOnboarding(env, userId);
     await replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [onboardingDone(settings)]);
     return;

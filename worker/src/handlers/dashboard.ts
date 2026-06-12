@@ -18,7 +18,7 @@ import { isDaySettled } from '../domain/schedule';
 const WINDOW_DAYS = 30; // 固定查 30 天:涵蓋最大圖表區間, 同時供 streak/week 計算。
 const MEAL_WINDOW_DAYS = 7; // 各餐別圖保留過往 7 天 (今天 + 前 6 天)。
 const ALLOWED_RANGES = [7, 14, 30];
-const DEFAULT_RANGE = 14;
+const DEFAULT_RANGE = 30;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {

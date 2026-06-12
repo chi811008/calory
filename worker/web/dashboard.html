@@ -127,8 +127,8 @@
 
     .chart-wrap { width: 100%; }
     svg { width: 100%; height: auto; display: block; }
-    .axis-label { fill: var(--sub); font-size: 27px; }
-    .target-label { fill: var(--near); font-size: 27px; font-weight: 700; }
+    .axis-label { fill: var(--sub); font-size: 18px; }
+    .target-label { fill: var(--near); font-size: 18px; font-weight: 700; }
 
     .legend {
       display: flex;
@@ -187,7 +187,7 @@
       breakfast: '#F59E0B', lunch: '#16A34A', dinner: '#6366F1',
       snack: '#EC4899', drink: '#06B6D4'
     };
-    var state = { range: 14, idToken: null, data: null, mealDay: null, mealExpanded: null };
+    var state = { range: 30, idToken: null, data: null, mealDay: null, mealExpanded: null };
 
     function el(id) { return document.getElementById(id); }
     function showMsg(text, isError) {
@@ -587,12 +587,22 @@
       var url = '/api/dashboard?range=' + state.range;
       fetch(url, { headers: { Authorization: 'Bearer ' + state.idToken } })
         .then(function (res) {
-          if (res.status === 401) throw new Error('登入驗證失敗,請從 LINE 重新開啟');
+          if (res.status === 401) {
+            // id_token 過期 (LIFF token 不會自動續期):整頁重新登入換新 token。
+            // sessionStorage 旗標確保最多自動重試一次, 避免設定錯誤時無限導向。
+            if (window.liff && liff.login && !sessionStorage.getItem('reauth')) {
+              sessionStorage.setItem('reauth', '1');
+              liff.login();
+              return new Promise(function () {}); // 導向中, 凍結後續鏈
+            }
+            throw new Error('登入驗證失敗,請從 LINE 重新開啟');
+          }
           if (!res.ok) throw new Error('伺服器忙線中,稍後再試');
           return res.json();
         })
         .then(function (body) {
           if (!body.success) throw new Error(body.error || '載入失敗');
+          sessionStorage.removeItem('reauth'); // 成功 → 清除重試旗標
           state.data = body.data;
           view(body.data);
         })
