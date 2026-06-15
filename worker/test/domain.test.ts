@@ -6,6 +6,7 @@ import { parseMessage } from '../src/domain/parse';
 import { dailyPraise, nearMissLine, overAchieveLine, NEAR_MISS_KCAL } from '../src/domain/praise';
 import { isDaySettled } from '../src/domain/schedule';
 import { cumulativeNetDeficit, weightProgress, heartFills, KCAL_PER_KG } from '../src/domain/weight';
+import { normalizeEstimate } from '../src/domain/photo';
 
 describe('tdee', () => {
   it('用 Mifflin-St Jeor 算男性 BMR', () => {
@@ -448,5 +449,73 @@ describe('heartFills — 減重目標愛心填滿比例', () => {
     // WHY: 超額時累積赤字下降,愛心比例必須能退回;負值也夾到 0,SVG 才不會畫破。
     expect(heartFills(-0.8, 4)).toEqual([0, 0, 0, 0]);
     expect(heartFills(0, 4)).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe('normalizeEstimate — 分項照片估算', () => {
+  it('items 加總:總熱量由程式算,不信模型自報,明細保留', () => {
+    // WHY: 模型算術會出錯;讓程式加總才可信 (Rule 5),明細留著供使用者檢視修正。
+    const r = normalizeEstimate({
+      label: '雞腿便當',
+      items: [
+        { label: '白飯', grams: 200, calories: 280 },
+        { label: '雞腿', grams: 150, calories: 300 },
+        { label: '青菜', grams: 100, calories: 50 },
+      ],
+    });
+    expect(r).not.toBeNull();
+    expect(r!.label).toBe('雞腿便當');
+    expect(r!.calories).toBe(630);
+    expect(r!.items).toHaveLength(3);
+  });
+
+  it('過濾無效項:壞掉的項目丟棄,總熱量只加有效項', () => {
+    // WHY: 模型偶爾吐出 calories<=0 或非數字的雜項;丟棄而非讓整筆失敗。
+    const r = normalizeEstimate({
+      label: '套餐',
+      items: [
+        { label: '飯', grams: 200, calories: 280 },
+        { label: '不明', grams: 0, calories: 0 },
+        { label: '亂碼', grams: 50, calories: 'abc' },
+        { label: '湯', grams: 100, calories: 70 },
+      ],
+    });
+    expect(r!.calories).toBe(350);
+    expect(r!.items).toHaveLength(2);
+  });
+
+  it('空陣列 / 全部無效 → null (看不出食物)', () => {
+    expect(normalizeEstimate({ label: 'x', items: [] })).toBeNull();
+    expect(
+      normalizeEstimate({ label: 'x', items: [{ label: '?', grams: 0, calories: 0 }] }),
+    ).toBeNull();
+  });
+
+  it('總熱量超界 → null (整桌爆量多半是模型亂猜)', () => {
+    expect(
+      normalizeEstimate({
+        label: '爆量',
+        items: [
+          { label: 'a', grams: 1, calories: 4000 },
+          { label: 'b', grams: 1, calories: 4000 },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('grams 缺失或無效 → 正規化為 0,不讓該項整個失敗 (calories 才是關鍵)', () => {
+    const r = normalizeEstimate({
+      label: '餐',
+      items: [{ label: '飯', grams: -5, calories: 280 }],
+    });
+    expect(r!.items![0].grams).toBe(0);
+    expect(r!.calories).toBe(280);
+  });
+
+  it('向後相容:舊格式 {label,calories} 無 items → 沿用單值,不帶明細', () => {
+    // WHY: 文字描述估算 (estimateCaloriesFromText) 與舊 pending 仍是單值格式,不能壞掉。
+    const r = normalizeEstimate({ label: '牛肉麵', calories: 650 });
+    expect(r).toEqual({ label: '牛肉麵', calories: 650 });
+    expect(r!.items).toBeUndefined();
   });
 });

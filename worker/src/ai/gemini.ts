@@ -6,9 +6,21 @@ import { normalizeEstimate, type PhotoEstimate } from '../domain/photo';
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
 const PROMPT =
-  '你是營養估算助手。看這張食物照片,估算整份餐點的「總熱量(大卡)」與「簡短中文品名」。' +
-  '只回傳 JSON,格式為 {"label":"品名","calories":整數大卡}。' +
-  '若看不出是食物,calories 請回 0。';
+  '你是專業營養估算助手。請逐項拆解這張食物照片並估算熱量。\n' +
+  '【步驟】\n' +
+  '1. 列出照片中每一樣可辨識的食物(主食、蛋白質、配菜、醬料、飲料分開列)。\n' +
+  '2. 估計每樣的份量(公克),依序用以下線索校準:\n' +
+  '   - 比例尺:照片中若有一隻成人手掌(掌寬約10公分),用它校準食物的平面大小;' +
+  '並可用「手掌≈一份肉(約100g)、拳頭≈一碗飯」輔助。\n' +
+  '   - 容器:辨識盛裝容器(碗/盤/杯/便當盒)推估體積,例如標準碗≈200g熟飯、便當盒依分格估各格份量。\n' +
+  '   - 角度:斜約45度拍攝可看出高度;若為正上方俯拍,高度不明時請採該容器的常見標準份量,不要假設食物堆得很高。\n' +
+  '3. 考慮烹調方式:油炸、勾芡、淋醬、奶油會明顯增加熱量,水煮、清蒸較低。\n' +
+  '4. 估計每樣食物的熱量(大卡)。\n' +
+  '【輸出】只回傳 JSON,格式為:\n' +
+  '{"label":"整份餐點的簡短中文品名","items":[{"label":"品名","grams":整數公克,"calories":整數大卡}]}\n' +
+  '- label 用一句話概括整份(例:「雞腿便當」「牛肉麵」)。\n' +
+  '- 每項 calories 為該項熱量;總熱量由系統加總,你不需自己加。\n' +
+  '- 若看不出是食物,items 回空陣列 []。';
 
 function bytesToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -24,6 +36,12 @@ const TEXT_PROMPT =
   '你是營養估算助手。根據以下食物文字描述,估算「總熱量(大卡)」與「簡短中文品名」。' +
   '份量詞 (小碗/中份/一瓶) 請納入估算。只回傳 JSON,格式為 {"label":"品名","calories":整數大卡}。' +
   '若無法判斷是食物,calories 請回 0。食物描述:';
+
+// 強制 JSON 輸出 + 關閉 thinking:估熱量不需內部推演 (邏輯已在輸出格式裡),關掉省一半延遲。
+const GEN_CONFIG = {
+  responseMimeType: 'application/json',
+  thinkingConfig: { thinkingBudget: 0 },
+};
 
 interface GeminiResponse {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
@@ -64,7 +82,7 @@ export async function estimateCaloriesFromText(
   }
   const body = {
     contents: [{ parts: [{ text: TEXT_PROMPT + label }] }],
-    generationConfig: { responseMimeType: 'application/json' },
+    generationConfig: GEN_CONFIG,
   };
   return callGemini(apiKey, body);
 }
@@ -88,7 +106,7 @@ export async function estimateCalories(
         ],
       },
     ],
-    generationConfig: { responseMimeType: 'application/json' },
+    generationConfig: GEN_CONFIG,
   };
   return callGemini(apiKey, body);
 }
