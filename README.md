@@ -16,7 +16,7 @@ A **LINE chatbot for calorie & weight tracking**, built as a serverless app on C
 
 | Photo → calorie logging | Daily deficit card |
 |:---:|:---:|
-| <img src="docs/demo-photo.gif" alt="Snap a food photo; the bot estimates calories and asks which meal" width="320"> | <img src="docs/demo-summary.png" alt="Daily income/expense card with streak and praise" width="320"> |
+| <img src="docs/demo-photo.png" alt="Snap a food photo; the bot estimates calories and asks which meal" width="320"> | <img src="docs/demo-summary.png" alt="Daily income/expense card with streak and praise" width="320"> |
 
 | LIFF chart dashboard | Text logging & onboarding |
 |:---:|:---:|
