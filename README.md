@@ -6,6 +6,26 @@ A **LINE chatbot for calorie & weight tracking**, built as a serverless app on C
 
 ---
 
+## Demo
+
+<!--
+  Drop your screenshots / GIFs into the docs/ folder using these exact filenames
+  (or rename the paths below). Recommended: 2–4 portrait shots ~400px wide, or a
+  short GIF of the photo-logging flow. PNG or GIF both render on GitHub.
+-->
+
+| Photo → calorie logging | Daily deficit card |
+|:---:|:---:|
+| <img src="docs/demo-photo.gif" alt="Snap a food photo; the bot estimates calories and asks which meal" width="320"> | <img src="docs/demo-summary.png" alt="Daily income/expense card with streak and praise" width="320"> |
+
+| LIFF chart dashboard | Text logging & onboarding |
+|:---:|:---:|
+| <img src="docs/demo-dashboard.png" alt="In-LINE dashboard: deficit trend, weight line, per-meal and goal charts" width="320"> | <img src="docs/demo-chat.png" alt="Logging meals by text and the guided TDEE onboarding" width="320"> |
+
+> _Images load once you add them to `docs/`. Until then GitHub shows the alt text — no broken layout._
+
+---
+
 ## What it does
 
 | Feature | How it works |
