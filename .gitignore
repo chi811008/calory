@@ -23,3 +23,6 @@ npm-debug.log*
 
 # graphify knowledge-graph output
 graphify-out/
+
+# Local Claude Code tooling config
+.claude/
