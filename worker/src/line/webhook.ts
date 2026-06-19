@@ -1,6 +1,6 @@
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { ensureUser, getOnboarding, getPendingPhoto } from '../db/repo';
-import { parseMessage, parsePhotoReply } from '../domain/parse';
+import { parseMessage, parsePhotoReply, type ParsedMessage } from '../domain/parse';
 import { isPendingFresh } from '../domain/photo';
 import { handleLog } from '../handlers/logFood';
 import { handleToday } from '../handlers/today';
@@ -21,6 +21,40 @@ import { startOnboarding, handleOnboarding } from '../handlers/onboarding';
 import { handlePhoto, confirmPhoto, cancelPhoto } from '../handlers/photo';
 import { replyMessage } from './client';
 import { helpMessage } from './flex';
+
+// 可分派的指令 kind:'settings' 在 switch 前已先攔截 (開始引導),故排除。
+type DispatchKind = Exclude<ParsedMessage['kind'], 'settings'>;
+type CommandHandler<K extends DispatchKind> = (
+  env: Env,
+  user: User,
+  cmd: Extract<ParsedMessage, { kind: K }>,
+  replyToken: string,
+) => Promise<void>;
+
+// 指令分派表。每個 kind 對應一個處理器,cmd 已依 kind 收斂為精確型別。
+// 新增 ParsedMessage 的 kind 時,此處會因型別不完整而編譯失敗 —— 等同 switch 的窮舉檢查。
+const COMMAND_HANDLERS: { [K in DispatchKind]: CommandHandler<K> } = {
+  log: (env, user, cmd, token) => handleLog(env, user, cmd.items, token),
+  today: (env, user, _cmd, token) => handleToday(env, user, token),
+  help: (env, _user, _cmd, token) =>
+    replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, token, [helpMessage()]),
+  savePreset: (env, user, cmd, token) =>
+    handleSavePreset(env, user, cmd.label, cmd.calories, token),
+  listPresets: (env, user, _cmd, token) => handleListPresets(env, user, token),
+  deletePreset: (env, user, cmd, token) => handleDeletePreset(env, user, cmd.label, token),
+  editFood: (env, user, cmd, token) => handleEditFood(env, user, cmd.index, cmd.calories, token),
+  deleteFood: (env, user, cmd, token) => handleDeleteFood(env, user, cmd.index, token),
+  listExercise: (env, user, _cmd, token) => handleListExercise(env, user, token),
+  editExercise: (env, user, cmd, token) =>
+    handleEditExercise(env, user, cmd.index, cmd.calories, token),
+  deleteExercise: (env, user, cmd, token) => handleDeleteExercise(env, user, cmd.index, token),
+  setGoal: (env, user, cmd, token) => handleSetGoal(env, user, cmd.goalKg, token),
+  showGoal: (env, user, _cmd, token) => handleShowGoal(env, user, token),
+  setWeight: (env, user, cmd, token) => handleSetWeight(env, user, cmd.weightKg, token),
+  showWeight: (env, user, _cmd, token) => handleShowWeight(env, user, token),
+  deleteWeight: (env, user, cmd, token) =>
+    handleDeleteWeight(env, user, cmd.month, cmd.day, token),
+};
 
 // LINE webhook 單一事件處理。目前支援文字訊息;圖片 (Phase 4) 先回提示。
 export async function handleEvent(event: any, env: Env): Promise<void> {
@@ -55,40 +89,10 @@ export async function handleEvent(event: any, env: Env): Promise<void> {
       return startOnboarding(env, userId, replyToken);
     }
 
-    switch (cmd.kind) {
-      case 'log':
-        return handleLog(env, user, cmd.items, replyToken);
-      case 'today':
-        return handleToday(env, user, replyToken);
-      case 'savePreset':
-        return handleSavePreset(env, user, cmd.label, cmd.calories, replyToken);
-      case 'listPresets':
-        return handleListPresets(env, user, replyToken);
-      case 'deletePreset':
-        return handleDeletePreset(env, user, cmd.label, replyToken);
-      case 'editFood':
-        return handleEditFood(env, user, cmd.index, cmd.calories, replyToken);
-      case 'deleteFood':
-        return handleDeleteFood(env, user, cmd.index, replyToken);
-      case 'listExercise':
-        return handleListExercise(env, user, replyToken);
-      case 'editExercise':
-        return handleEditExercise(env, user, cmd.index, cmd.calories, replyToken);
-      case 'deleteExercise':
-        return handleDeleteExercise(env, user, cmd.index, replyToken);
-      case 'setGoal':
-        return handleSetGoal(env, user, cmd.goalKg, replyToken);
-      case 'showGoal':
-        return handleShowGoal(env, user, replyToken);
-      case 'setWeight':
-        return handleSetWeight(env, user, cmd.weightKg, replyToken);
-      case 'showWeight':
-        return handleShowWeight(env, user, replyToken);
-      case 'deleteWeight':
-        return handleDeleteWeight(env, user, cmd.month, cmd.day, replyToken);
-      default:
-        return replyMessage(env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [helpMessage()]);
-    }
+    // 從分派表取出處理器。cmd.kind 與 cmd 的關聯型別 TS 無法自動收斂
+    // (correlated union 限制),故在此單一邊界做一次轉型;分派表本身仍是型別安全且窮舉的。
+    const handler = COMMAND_HANDLERS[cmd.kind] as CommandHandler<DispatchKind>;
+    return handler(env, user, cmd, replyToken);
   }
 
   if (message.type === 'image') {
