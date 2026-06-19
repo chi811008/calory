@@ -1,6 +1,6 @@
 import type { Env, Meal, MealItem, Sex, User } from '../types';
 import type { OnboardingDraft, OnboardingSettings } from '../domain/onboarding';
-import type { PhotoEstimate } from '../domain/photo';
+import type { PhotoEstimate, PhotoPhase } from '../domain/photo';
 
 // 資料存取層 (repository)。所有查詢都以 line_user_id 隔離資料。
 
@@ -110,39 +110,85 @@ export async function clearOnboarding(env: Env, userId: string): Promise<void> {
 }
 
 export interface PendingPhoto {
-  estimate: PhotoEstimate;
+  messageId: string | null;
+  phase: PhotoPhase;
+  notes: string | null;
+  estimate: PhotoEstimate | null; // describe 階段尚未估算時為 null
   createdAt: string;
 }
 
-/** 以 upsert 暫存照片估算 (等使用者選餐別確認)。 */
-export async function setPendingPhoto(
+/** 收到照片:登記 pending (phase=describe),只存 messageId,先不抓圖也不估算。 */
+export async function startPendingPhoto(
   env: Env,
   userId: string,
-  estimate: PhotoEstimate,
+  messageId: string,
 ): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO pending_photo (user_id, estimate_json) VALUES (?, ?)
+    `INSERT INTO pending_photo (user_id, message_id, phase, notes, estimate_json)
+       VALUES (?, ?, 'describe', NULL, NULL)
        ON CONFLICT(user_id)
-       DO UPDATE SET estimate_json = excluded.estimate_json, created_at = datetime('now')`,
+       DO UPDATE SET message_id = excluded.message_id, phase = 'describe',
+                     notes = NULL, estimate_json = NULL, created_at = datetime('now')`,
   )
-    .bind(userId, JSON.stringify(estimate))
+    .bind(userId, messageId)
     .run();
 }
 
-/** 取得 pending 照片估算;沒有或資料損壞回 null。新鮮度由呼叫端 (isPendingFresh) 判斷。 */
-export async function getPendingPhoto(env: Env, userId: string): Promise<PendingPhoto | null> {
-  const row = await env.DB.prepare(
-    'SELECT estimate_json, created_at FROM pending_photo WHERE user_id = ?',
+/** 估算完成:寫入 phase=review、累積描述與估算結果,並更新 created_at (續命 TTL)。 */
+export async function reviewPendingPhoto(
+  env: Env,
+  userId: string,
+  notes: string | null,
+  estimate: PhotoEstimate,
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE pending_photo
+        SET phase = 'review', notes = ?, estimate_json = ?, created_at = datetime('now')
+      WHERE user_id = ?`,
+  )
+    .bind(notes, JSON.stringify(estimate), userId)
+    .run();
+}
+
+/** 使用者按儲存:切到 meal 階段等選餐別,並續命 TTL。 */
+export async function setPendingPhotoMealPhase(env: Env, userId: string): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE pending_photo SET phase = 'meal', created_at = datetime('now') WHERE user_id = ?`,
   )
     .bind(userId)
-    .first<{ estimate_json: string; created_at: string }>();
+    .run();
+}
+
+/** 取得 pending 照片;沒有回 null。estimate_json 損壞時 estimate 退為 null。新鮮度由 isPendingFresh 判斷。 */
+export async function getPendingPhoto(env: Env, userId: string): Promise<PendingPhoto | null> {
+  const row = await env.DB.prepare(
+    'SELECT message_id, phase, notes, estimate_json, created_at FROM pending_photo WHERE user_id = ?',
+  )
+    .bind(userId)
+    .first<{
+      message_id: string | null;
+      phase: string;
+      notes: string | null;
+      estimate_json: string | null;
+      created_at: string;
+    }>();
   if (!row) return null;
-  try {
-    return { estimate: JSON.parse(row.estimate_json) as PhotoEstimate, createdAt: row.created_at };
-  } catch (err) {
-    console.error('corrupt pending photo', userId, err);
-    return null;
+
+  let estimate: PhotoEstimate | null = null;
+  if (row.estimate_json) {
+    try {
+      estimate = JSON.parse(row.estimate_json) as PhotoEstimate;
+    } catch (err) {
+      console.error('corrupt pending photo estimate', userId, err);
+    }
   }
+  return {
+    messageId: row.message_id,
+    phase: row.phase as PhotoPhase,
+    notes: row.notes,
+    estimate,
+    createdAt: row.created_at,
+  };
 }
 
 export async function clearPendingPhoto(env: Env, userId: string): Promise<void> {

@@ -1,19 +1,52 @@
 import type { PhotoEstimate } from '../domain/photo';
 
-// 拍照辨識的 LINE 訊息。估算後用 Quick Reply 讓使用者點選餐別或取消。
+// 拍照辨識的 LINE 訊息。對話式流程:收到照片 → 問補充 → 估算 → 儲存 → 選餐別。
 
-/** 估算結果 + 選餐別的 Quick Reply。有分項明細時逐項列出供使用者檢視。 */
-export function photoEstimateMessage(estimate: PhotoEstimate): object {
-  const labels = ['早餐', '午餐', '晚餐', '點心', '飲料', '取消'];
+/** Quick Reply 工具:把 label 陣列轉成 message action (label 即送出文字)。 */
+function quickReply(labels: string[]): object {
+  return {
+    items: labels.map((label) => ({
+      type: 'action',
+      action: { type: 'message', label, text: label },
+    })),
+  };
+}
+
+/** 收到照片後:先問要不要補充描述,提供「直接估算」與「放棄」。 */
+export function askDescribeMessage(): object {
   return {
     type: 'text',
-    text: `${photoEstimateText(estimate)}\n要記到哪一餐？`,
-    quickReply: {
-      items: labels.map((label) => ({
-        type: 'action',
-        action: { type: 'message', label, text: label },
-      })),
-    },
+    text:
+      '📷 收到照片！要補充什麼嗎？\n' +
+      '可以打品名或份量,例如「無糖冰咖啡」「花魚一夜干 一片」,我會連同照片一起判讀。\n' +
+      '不用補充就按〔直接估算〕。',
+    quickReply: quickReply(['直接估算', '放棄']),
+  };
+}
+
+/** 估算結果 + 「儲存 / 放棄」的 Quick Reply。想再補充直接打字即可 (會重估)。 */
+export function photoEstimateMessage(estimate: PhotoEstimate): object {
+  return {
+    type: 'text',
+    text: `${photoEstimateText(estimate)}\n要存嗎？想再補充就直接打字,或按〔儲存〕。`,
+    quickReply: quickReply(['儲存', '放棄']),
+  };
+}
+
+/** 使用者按儲存後:選餐別的 Quick Reply。 */
+export function askMealMessage(): object {
+  return {
+    type: 'text',
+    text: '要記到哪一餐？',
+    quickReply: quickReply(['早餐', '午餐', '晚餐', '點心', '飲料', '放棄']),
+  };
+}
+
+/** 照片內容已從 LINE 取不回 (久放過期):請使用者重傳。 */
+export function photoExpiredMessage(): object {
+  return {
+    type: 'text',
+    text: '😅 這張照片已經過期、抓不回來了,再傳一次就好 📷',
   };
 }
 

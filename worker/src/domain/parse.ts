@@ -1,4 +1,5 @@
 import type { Meal } from '../types';
+import type { PhotoPhase } from './photo';
 
 // 解析使用者在 LINE 打的文字指令。純函式,不碰 IO。
 //
@@ -98,25 +99,46 @@ function labelOf(text: string, keywordRe: RegExp | null): string | undefined {
   return label || undefined;
 }
 
-const PHOTO_CANCEL_RE = /^(取消|重拍|不要|算了|cancel)/i;
+const PHOTO_CANCEL_RE = /^(取消|重拍|不要|算了|放棄|cancel)$/i;
+const PHOTO_ESTIMATE_NOW_RE = /^(直接估算|不用補充|不補充|就這樣|直接算|估算)$/;
+const PHOTO_SAVE_RE = /^(儲存|存檔|save)$/i;
 
-export type PhotoReply = { kind: 'meal'; meal: Meal } | { kind: 'cancel' } | { kind: 'other' };
+export type PhotoReply =
+  | { kind: 'estimateNow' } // describe 階段:直接估算 (不補充文字)
+  | { kind: 'describe'; text: string } // 自由文字補充 → 連同照片重估
+  | { kind: 'save' } // review 階段:儲存,進入選餐別
+  | { kind: 'meal'; meal: Meal } // meal 階段:選定餐別 → 寫入
+  | { kind: 'cancel' } // 放棄這張照片
+  | { kind: 'other' }; // 落回一般指令處理
 
 /**
- * 解析「pending 照片」進行中時的使用者回覆。
- * - 取消類 → cancel
- * - 含數字 → other (例如「午餐 600」是手動記錄,不該被照片估算劫持)
- * - 純餐別關鍵字 → 指定餐別 (把照片估算記到該餐)
- * - 其餘 → other (落回一般指令)
+ * 解析「pending 照片」進行中時的使用者回覆,依當前對話階段判讀。
+ * 設計:除了明確的「放棄」逃生與各階段自己的按鈕,其餘自由文字一律視為描述補充。
+ *  - 任何階段:放棄類 → cancel。
+ *  - describe:「直接估算」→ estimateNow;其餘文字 → describe (補充並估算)。
+ *  - review  :「儲存」→ save;其餘文字 → describe (再補充並重估)。
+ *  - meal    :純餐別關鍵字 → meal;其餘 → other (落回一般指令)。
  */
-export function parsePhotoReply(raw: string): PhotoReply {
+export function parsePhotoReply(raw: string, phase: PhotoPhase): PhotoReply {
   const text = raw.trim();
+  if (!text) return { kind: 'other' };
   if (PHOTO_CANCEL_RE.test(text)) return { kind: 'cancel' };
-  if (NUMBER_RE.test(text)) return { kind: 'other' };
-  for (const { re, meal } of MEAL_KEYWORDS) {
-    if (re.test(text)) return { kind: 'meal', meal };
+
+  if (phase === 'meal') {
+    for (const { re, meal } of MEAL_KEYWORDS) {
+      if (re.test(text)) return { kind: 'meal', meal };
+    }
+    return { kind: 'other' };
   }
-  return { kind: 'other' };
+
+  if (phase === 'describe') {
+    if (PHOTO_ESTIMATE_NOW_RE.test(text)) return { kind: 'estimateNow' };
+    return { kind: 'describe', text };
+  }
+
+  // review
+  if (PHOTO_SAVE_RE.test(text)) return { kind: 'save' };
+  return { kind: 'describe', text };
 }
 
 /** 解析單行為一筆 LogItem;只設定餐別 (如純「午餐」) 或空行回 null。currentMeal 由呼叫端維護。 */

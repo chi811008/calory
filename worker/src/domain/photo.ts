@@ -1,6 +1,12 @@
 // 拍照辨識的純函式:把模型輸出正規化成可信的估算,以及 pending 照片的過期判斷。
 // 辨識本身交給 Gemini (需要判斷),但這裡 deterministic 地把關界限與型別。
 
+// pending 照片的對話階段:
+//  describe — 剛收到照片,等使用者補充描述或按「直接估算」(此時還沒呼叫模型)。
+//  review   — 已估算,等使用者「儲存」或繼續補充描述 (再估)。
+//  meal     — 使用者已選擇儲存,等選餐別。
+export type PhotoPhase = 'describe' | 'review' | 'meal';
+
 export interface PhotoItem {
   label: string;
   grams: number;

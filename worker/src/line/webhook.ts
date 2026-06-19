@@ -18,7 +18,13 @@ import {
 import { handleSetGoal, handleShowGoal } from '../handlers/goal';
 import { handleSetWeight, handleShowWeight, handleDeleteWeight } from '../handlers/weight';
 import { startOnboarding, handleOnboarding } from '../handlers/onboarding';
-import { handlePhoto, confirmPhoto, cancelPhoto } from '../handlers/photo';
+import {
+  handlePhoto,
+  estimateAndReview,
+  askMeal,
+  confirmPhoto,
+  cancelPhoto,
+} from '../handlers/photo';
 import { replyMessage } from './client';
 import { helpMessage } from './flex';
 
@@ -73,14 +79,28 @@ export async function handleEvent(event: any, env: Env): Promise<void> {
     const draft = await getOnboarding(env, userId);
     if (draft) return handleOnboarding(env, userId, draft, text, replyToken);
 
-    // 有「新鮮的」待確認照片:純餐別 → 確認記錄;取消 → 丟棄;其他 → 落回一般指令。
+    // 有「新鮮的」待確認照片:依對話階段判讀回覆 (補充/直接估算/儲存/選餐別/放棄)。
+    // 只有「放棄」與各階段按鈕是特殊指令,其餘自由文字一律當描述補充;'other' 才落回一般指令。
     const pending = await getPendingPhoto(env, userId);
     if (pending && isPendingFresh(pending.createdAt)) {
-      const reply = parsePhotoReply(text);
-      if (reply.kind === 'meal') {
-        return confirmPhoto(env, user, pending.estimate, reply.meal, replyToken);
+      const reply = parsePhotoReply(text, pending.phase);
+      switch (reply.kind) {
+        case 'cancel':
+          return cancelPhoto(env, userId, replyToken);
+        case 'estimateNow':
+          return estimateAndReview(env, user, pending, null, replyToken);
+        case 'describe':
+          return estimateAndReview(env, user, pending, reply.text, replyToken);
+        case 'save':
+          return askMeal(env, user, pending, replyToken);
+        case 'meal':
+          if (pending.estimate) {
+            return confirmPhoto(env, user, pending.estimate, reply.meal, replyToken);
+          }
+          break; // 估算遺失 (不應發生),落回一般指令
+        case 'other':
+          break; // 落回一般指令解析
       }
-      if (reply.kind === 'cancel') return cancelPhoto(env, userId, replyToken);
     }
 
     const cmd = parseMessage(text);
