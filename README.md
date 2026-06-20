@@ -20,7 +20,7 @@ A **LINE chatbot for calorie & weight tracking**, built as a serverless app on C
 
 | Photo → calorie logging ｜ 拍照估算 | Daily deficit card ｜ 每日收支卡 |
 |:---:|:---:|
-| <img src="docs/demo1.JPG" alt="Snap a food photo, add an optional description; the bot breaks down each item's calories, then you confirm before logging" width="320"> | <img src="docs/demo-summary.png" alt="Daily income/expense card with streak and praise" width="320"> |
+| <img src="docs/demo.JPG" alt="Snap a food photo, add an optional description; the bot breaks down each item's calories, then you confirm before logging" width="320"> | <img src="docs/demo-summary.png" alt="Daily income/expense card with streak and praise" width="320"> |
 
 | LIFF chart dashboard ｜ LIFF 圖表儀表板 | Text logging & onboarding ｜ 文字記錄與引導 |
 |:---:|:---:|
