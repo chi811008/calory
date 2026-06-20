@@ -57,9 +57,17 @@ CREATE TABLE IF NOT EXISTS meal_presets (
 -- 同一使用者同名只留一筆,支援 upsert (存相同名稱即覆蓋熱量)。
 CREATE UNIQUE INDEX IF NOT EXISTS idx_preset_user_label ON meal_presets(user_id, label);
 
+-- 拍照記錄的對話暫存 (一使用者一張)。對話分三階段:
+--   describe → 剛收到照片,只存 message_id,等補充描述或「直接估算」(estimate_json 為 NULL)。
+--   review   → 已估算,estimate_json 有值,等「儲存」或繼續補充。
+--   meal     → 已選儲存,等選餐別。
+-- created_at 每次互動會更新 (TTL 視為閒置時間,見 isPendingFresh)。
 CREATE TABLE IF NOT EXISTS pending_photo (
   user_id       TEXT PRIMARY KEY,
-  estimate_json TEXT NOT NULL,
+  message_id    TEXT,                              -- LINE 圖片 messageId (重抓 bytes 用)
+  phase         TEXT NOT NULL DEFAULT 'describe',  -- describe | review | meal
+  notes         TEXT,                              -- 累積的文字補充
+  estimate_json TEXT,                              -- 目前估算 (describe 階段為 NULL)
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

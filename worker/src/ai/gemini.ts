@@ -91,17 +91,24 @@ export async function estimateCalories(
   apiKey: string,
   bytes: ArrayBuffer,
   mime: string,
+  note?: string,
 ): Promise<PhotoEstimate | null> {
   if (!apiKey) {
     console.error('GEMINI_API_KEY not configured');
     return null;
   }
 
+  // 使用者補充 (品名/份量) 併入同一次視覺呼叫,作為校正線索而非取代判讀。
+  const trimmed = note?.trim();
+  const promptText = trimmed
+    ? `${PROMPT}\n【使用者補充】${trimmed}\n請把上述補充當作品名與份量的校正線索,與照片一起判讀。`
+    : PROMPT;
+
   const body = {
     contents: [
       {
         parts: [
-          { text: PROMPT },
+          { text: promptText },
           { inline_data: { mime_type: mime, data: bytesToBase64(bytes) } },
         ],
       },

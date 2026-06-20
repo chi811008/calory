@@ -55,23 +55,54 @@ describe('isPendingFresh', () => {
 });
 
 describe('parsePhotoReply', () => {
-  it('純餐別關鍵字 → 指定餐別 (確認照片)', () => {
-    expect(parsePhotoReply('午餐')).toEqual({ kind: 'meal', meal: 'lunch' });
-    expect(parsePhotoReply('早餐')).toEqual({ kind: 'meal', meal: 'breakfast' });
+  it('任何階段:放棄類 → cancel', () => {
+    // WHY: 放棄是唯一的逃生指令,任何階段都要能中止這張照片,不被當成描述。
+    expect(parsePhotoReply('取消', 'describe')).toEqual({ kind: 'cancel' });
+    expect(parsePhotoReply('放棄', 'review')).toEqual({ kind: 'cancel' });
+    expect(parsePhotoReply('重拍', 'meal')).toEqual({ kind: 'cancel' });
   });
 
-  it('取消類 → cancel', () => {
-    expect(parsePhotoReply('取消')).toEqual({ kind: 'cancel' });
-    expect(parsePhotoReply('重拍')).toEqual({ kind: 'cancel' });
+  describe('describe 階段 (剛收到照片,等補充)', () => {
+    it('「直接估算」按鈕 → estimateNow', () => {
+      expect(parsePhotoReply('直接估算', 'describe')).toEqual({ kind: 'estimateNow' });
+      expect(parsePhotoReply('不用補充', 'describe')).toEqual({ kind: 'estimateNow' });
+    });
+
+    it('自由文字 (含品名/份量/數字) → describe,連同照片重估', () => {
+      // WHY: 補充階段的文字就是要餵給模型的描述,份量數字 (300ml) 不能被當成手動記錄攔走。
+      expect(parsePhotoReply('無糖冰咖啡', 'describe')).toEqual({
+        kind: 'describe',
+        text: '無糖冰咖啡',
+      });
+      expect(parsePhotoReply('花魚一夜干 一片', 'describe')).toEqual({
+        kind: 'describe',
+        text: '花魚一夜干 一片',
+      });
+      expect(parsePhotoReply('300ml', 'describe')).toEqual({ kind: 'describe', text: '300ml' });
+    });
   });
 
-  it('含數字的訊息不攔截,當成一般指令', () => {
-    // WHY: 「午餐 600」是使用者要手動記 600,不能被解讀成把照片估算記到午餐。
-    expect(parsePhotoReply('午餐 600')).toEqual({ kind: 'other' });
+  describe('review 階段 (已估算,等儲存或再補充)', () => {
+    it('「儲存」按鈕 → save', () => {
+      expect(parsePhotoReply('儲存', 'review')).toEqual({ kind: 'save' });
+    });
+
+    it('自由文字 → describe (再補充並重估)', () => {
+      expect(parsePhotoReply('其實是大杯', 'review')).toEqual({
+        kind: 'describe',
+        text: '其實是大杯',
+      });
+    });
   });
 
-  it('其他文字 → other (落回一般指令處理)', () => {
-    expect(parsePhotoReply('今天')).toEqual({ kind: 'other' });
-    expect(parsePhotoReply('你好')).toEqual({ kind: 'other' });
+  describe('meal 階段 (已按儲存,等選餐別)', () => {
+    it('純餐別關鍵字 → 指定餐別', () => {
+      expect(parsePhotoReply('午餐', 'meal')).toEqual({ kind: 'meal', meal: 'lunch' });
+      expect(parsePhotoReply('飲料', 'meal')).toEqual({ kind: 'meal', meal: 'drink' });
+    });
+
+    it('非餐別文字 → other (落回一般指令)', () => {
+      expect(parsePhotoReply('你好', 'meal')).toEqual({ kind: 'other' });
+    });
   });
 });
